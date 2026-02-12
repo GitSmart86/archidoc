@@ -1,0 +1,11 @@
+[package]
+name = "archidoc-tests"
+version = "0.1.0"
+edition = "2021"
+description = "BDD test infrastructure — DSL, protocol drivers, fakes"
+
+[dependencies]
+archidoc-types = { path = "../archidoc-types" }
+archidoc-rust = { path = "../../adapters/archidoc-rust" }
+archidoc-engine = { path = "../archidoc-engine" }
+tempfile = "3"

@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/docauto/archidoc-ir-schema.json",
+  "title": "ModuleDoc[] IR Schema",
+  "description": "JSON Intermediate Representation for architecture documentation. This is the contract between any language adapter and the core generator.",
+  "type": "array",
+  "items": {
+    "$ref": "#/$defs/ModuleDoc"
+  },
+  "$defs": {
+    "ModuleDoc": {
+      "type": "object",
+      "required": [
+        "module_path",
+        "content",
+        "source_file",
+        "c4_level",
+        "pattern",
+        "pattern_status",
+        "description",
+        "parent_container",
+        "relationships",
+        "files"
+      ],
+      "properties": {
+        "module_path": {
+          "type": "string",
+          "description": "Dot-notation module path (e.g. 'bus', 'bus.calc')"
+        },
+        "content": {
+          "type": "string",
+          "description": "Raw annotation text extracted from source comments"
+        },
+        "source_file": {
+          "type": "string",
+          "description": "Filesystem path to the source file"
+        },
+        "c4_level": {
+          "type": "string",
+          "enum": ["container", "component", "unknown"],
+          "description": "C4 architecture level"
+        },
+        "pattern": {
+          "type": "string",
+          "description": "GoF design pattern name (e.g. 'Mediator', 'Strategy')"
+        },
+        "pattern_status": {
+          "type": "string",
+          "enum": ["planned", "verified"],
+          "description": "Confidence level for the pattern assignment"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the module's purpose"
+        },
+        "parent_container": {
+          "type": ["string", "null"],
+          "description": "Module path of the parent container, or null for top-level elements"
+        },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Relationship"
+          },
+          "description": "Runtime dependencies declared via <<uses>> markers"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FileEntry"
+          },
+          "description": "File catalog entries from the module's file table"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Relationship": {
+      "type": "object",
+      "required": ["target", "label", "protocol"],
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "Module path of the dependency target"
+        },
+        "label": {
+          "type": "string",
+          "description": "Human-readable description of the relationship"
+        },
+        "protocol": {
+          "type": "string",
+          "description": "Communication protocol or mechanism"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FileEntry": {
+      "type": "object",
+      "required": ["name", "pattern", "pattern_status", "purpose", "health"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Filename (e.g. 'lanes.rs')"
+        },
+        "pattern": {
+          "type": "string",
+          "description": "GoF design pattern name for this file"
+        },
+        "pattern_status": {
+          "type": "string",
+          "enum": ["planned", "verified"],
+          "description": "Confidence level for the file's pattern"
+        },
+        "purpose": {
+          "type": "string",
+          "description": "Responsibility or purpose of this file"
+        },
+        "health": {
+          "type": "string",
+          "enum": ["planned", "active", "stable"],
+          "description": "Implementation maturity"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

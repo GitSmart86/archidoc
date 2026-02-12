@@ -1,0 +1,29 @@
+{
+  "name": "archidoc-ts",
+  "version": "0.1.0",
+  "description": "TypeScript language adapter for archidoc — parses @c4 JSDoc annotations and emits JSON IR",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "archidoc-ts": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "c4",
+    "architecture",
+    "documentation",
+    "jsdoc",
+    "archidoc"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

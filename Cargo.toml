@@ -1,0 +1,9 @@
+[workspace]
+members = [
+    "core/archidoc-types",
+    "core/archidoc-engine",
+    "core/archidoc-cli",
+    "core/tests",
+    "adapters/archidoc-rust",
+]
+resolver = "2"

@@ -1,0 +1,10 @@
+[package]
+name = "archidoc-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Language-agnostic generator engine — reads ModuleDoc, produces docs and diagrams"
+
+[dependencies]
+archidoc-types = { path = "../archidoc-types" }
+serde_json = "1"
+tempfile = "3"

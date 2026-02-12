@@ -1,0 +1,10 @@
+[package]
+name = "archidoc-rust"
+version = "0.1.0"
+edition = "2021"
+description = "Rust language adapter — parses //! annotations, emits ModuleDoc"
+
+[dependencies]
+archidoc-types = { path = "../../core/archidoc-types" }
+syn = { version = "2", features = ["full", "parsing"] }
+walkdir = "2"

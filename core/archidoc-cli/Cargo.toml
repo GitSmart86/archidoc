@@ -1,0 +1,14 @@
+[package]
+name = "archidoc-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI facade — orchestrates adapter + engine"
+
+[[bin]]
+name = "archidoc"
+path = "src/main.rs"
+
+[dependencies]
+archidoc-types = { path = "../archidoc-types" }
+archidoc-rust = { path = "../../adapters/archidoc-rust" }
+archidoc-engine = { path = "../archidoc-engine" }
