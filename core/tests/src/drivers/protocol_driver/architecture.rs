@@ -30,21 +30,18 @@ pub trait ArchitectureDriver: Send {
     // Assertions — verify user-visible outcomes
     // =========================================================================
 
-    // --- Documentation ---
+    // --- ARCHITECTURE.md ---
 
-    /// Confirm documentation was produced for a named element.
-    fn confirm_documentation_exists(&self, name: &str);
+    /// Confirm the ARCHITECTURE.md was produced.
+    fn confirm_architecture_produced(&self);
 
-    /// Confirm documentation contains expected content.
-    fn confirm_documentation_describes(&self, name: &str, expected_content: &str);
+    /// Confirm the ARCHITECTURE.md contains expected text.
+    fn confirm_architecture_contains(&self, expected: &str);
 
-    /// Confirm the architecture index lists a named element.
+    /// Confirm the component index table lists a named element.
     fn confirm_index_lists(&self, name: &str);
 
-    /// Confirm the architecture index was produced.
-    fn confirm_index_exists(&self);
-
-    // --- Diagrams ---
+    // --- Diagrams (inline in ARCHITECTURE.md) ---
 
     /// Confirm the architecture diagram shows a container.
     fn confirm_diagram_shows_container(&self, container: &str);
@@ -54,9 +51,6 @@ pub trait ArchitectureDriver: Send {
 
     /// Confirm the architecture diagram shows a dependency arrow.
     fn confirm_diagram_shows_dependency(&self, from: &str, to: &str);
-
-    /// Confirm a diagram export was produced for the given level.
-    fn confirm_export_produced(&self, level: &str);
 
     // --- Architecture structure ---
 
@@ -207,4 +201,36 @@ pub trait ArchitectureDriver: Send {
 
     /// Run a named fitness function and confirm it fails for the given module.
     fn confirm_fitness_fails(&self, fitness_name: &str, failing_module: &str);
+
+    // =========================================================================
+    // Phase L — Annotation scaffolding
+    // =========================================================================
+
+    /// Generate annotation template for a module's directory.
+    fn suggest_for(&mut self, element: &str);
+
+    /// Get the generated suggestion output.
+    fn suggestion_output(&self) -> &str;
+
+    /// Confirm the suggestion infers the expected C4 level.
+    fn confirm_suggestion_level(&self, level: &str);
+
+    /// Confirm the suggestion lists a source file.
+    fn confirm_suggestion_lists_file(&self, filename: &str);
+
+    // =========================================================================
+    // Phase L — IR merging
+    // =========================================================================
+
+    /// Save current IR as a named snapshot.
+    fn save_ir_snapshot(&mut self, name: &str);
+
+    /// Merge named IR snapshots into a unified set.
+    fn merge_ir_snapshots(&mut self, names: &[&str]);
+
+    /// Confirm the merged IR has the expected element count.
+    fn confirm_merged_element_count(&self, expected: usize);
+
+    /// Confirm the merged IR contains a specific element at a given level.
+    fn confirm_merged_contains(&self, name: &str, level: &str);
 }

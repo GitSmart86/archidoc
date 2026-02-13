@@ -1,17 +1,22 @@
 # archidoc
 
-<!-- badges: crates.io, npm, CI — add after publishing -->
+[![CI](https://github.com/archidoc/archidoc/actions/workflows/ci.yml/badge.svg)](https://github.com/archidoc/archidoc/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/archidoc-cli.svg)](https://crates.io/crates/archidoc-cli)
+[![npm](https://img.shields.io/npm/v/archidoc-ts.svg)](https://www.npmjs.com/package/archidoc-ts)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Your architecture diagrams are always wrong because nobody updates them. archidoc fixes this — it extracts C4 architecture documentation directly from source code annotations, so your diagrams stay in sync with your code. If they drift, `archidoc --check` fails your CI build.
 
 ## What It Does
 
-Developers annotate module entry files (`mod.rs`, `index.ts`, `__init__.py`) with structured comments containing C4 markers, GoF pattern labels, and file-level responsibility tables. archidoc compiles these annotations into:
+Developers annotate module entry files (`mod.rs`, `index.ts`, `__init__.py`) with structured comments containing C4 markers, GoF pattern labels, and file-level responsibility tables. archidoc compiles these annotations into a single **ARCHITECTURE.md** containing:
 
-- **Mermaid C4 diagrams** (context, container, component levels)
-- **Markdown architecture docs** (module-level design documentation)
-- **draw.io CSV imports** (for visual diagramming tools)
+- **Inline Mermaid C4 diagrams** (container and component levels)
+- **Component index table** (linking directly to source files)
+- **Relationship map** (dependency arrows with labels and protocols)
 - **JSON IR** (portable intermediate representation for cross-language pipelines)
+
+Optional sidecar outputs: **PlantUML** (`--plantuml`) and **draw.io CSV** (`--drawio`).
 
 It also detects **architecture drift** (docs out of sync with code), validates **file tables** (ghost/orphan detection), and reports **architecture health** (pattern confidence, file maturity).
 
@@ -37,8 +42,14 @@ npm install archidoc-ts
 ## Usage
 
 ```bash
-# Generate documentation from source annotations
+# Generate ARCHITECTURE.md from source annotations
 archidoc .
+
+# Custom output path
+archidoc . -o docs/ARCHITECTURE.md
+
+# Also generate PlantUML and/or draw.io sidecar files
+archidoc . --plantuml --drawio
 
 # Check for documentation drift (CI gate — exits non-zero on drift)
 archidoc --check .
@@ -49,11 +60,20 @@ archidoc --health .
 # Export JSON IR for cross-language pipelines
 archidoc --emit-ir .
 
-# Generate docs from JSON IR (any language adapter)
+# Generate ARCHITECTURE.md from JSON IR (any language adapter)
 archidoc --from-json-file ir.json .
+
+# Merge IR from multiple adapters (polyglot projects)
+archidoc --merge-ir --from-json-file rust.json --from-json-file ts.json .
 
 # Validate IR against schema
 archidoc --from-json-file ir.json --validate-ir
+
+# Generate annotation template for an unannotated directory
+archidoc suggest src/api/
+
+# Write the template directly into a module entry file
+archidoc suggest src/api/ >> src/api/mod.rs
 ```
 
 ## Annotation Convention
@@ -61,11 +81,13 @@ archidoc --from-json-file ir.json --validate-ir
 Container-level (`mod.rs`):
 
 ```rust
-//! # Bus Module <<container>>
+//! @c4 container
+//!
+//! # Bus Module
 //!
 //! Central messaging and caching backbone.
 //!
-//! <<uses: agents_internal, "Processed market data", "crossbeam channel">>
+//! @c4 uses agents_internal "Processed market data" "crossbeam channel"
 //!
 //! | File | Pattern | Purpose | Health |
 //! |------|---------|---------|--------|
@@ -91,9 +113,9 @@ TypeScript (`index.ts`):
 
 ### C4 Markers
 
-- `<<container>>` / `@c4 container` — marks a C4 container
-- `<<component>>` / `@c4 component` — marks a C4 component
-- `<<uses: target, "label", "protocol">>` / `@c4 uses target "label" "protocol"` — declares a dependency
+- `@c4 container` — marks a C4 container
+- `@c4 component` — marks a C4 component
+- `@c4 uses target "label" "protocol"` — declares a dependency
 
 ### File Table
 
@@ -118,7 +140,9 @@ To adopt archidoc on an existing project:
 
 2. **Add a C4 marker** to each module's entry file (`mod.rs`, `index.ts`, or `__init__.py`):
    ```rust
-   //! # Api <<container>>
+   //! @c4 container
+   //!
+   //! # Api
    //!
    //! REST API gateway — handles authentication and request routing.
    ```
@@ -130,7 +154,7 @@ To adopt archidoc on an existing project:
 
 4. **Add relationships** between containers:
    ```rust
-   //! <<uses: database, "Persists user data", "sqlx">>
+   //! @c4 uses database "Persists user data" "sqlx"
    ```
 
 5. **Add file tables** to document each module's internal structure:
@@ -154,14 +178,15 @@ Start with containers only. Add components and file tables as the architecture s
 Cargo.toml              Workspace root
 core/
   archidoc-types/       Shared types (ModuleDoc, C4Level, FileEntry, Relationship, etc.)
-  archidoc-engine/      Language-agnostic generator (markdown, mermaid, draw.io, IR, drift, health)
+  archidoc-engine/      Language-agnostic generator (ARCHITECTURE.md, mermaid, plantuml, draw.io, IR, drift, health)
   archidoc-cli/         CLI binary: archidoc
   spec/                 JSON IR schema
   tests/                BDD test infrastructure (DSL, protocol drivers, fakes)
 adapters/
   archidoc-rust/        Rust adapter (//! doc comments -> ModuleDoc)
   archidoc-ts/          TypeScript adapter (@c4 JSDoc -> JSON IR)
-  how-to-write-a-language-adapter.md
+docs/                   Guides (annotation spec, getting started, LLM context)
+examples/               Example annotated projects
 ```
 
 ## Architecture
@@ -170,9 +195,9 @@ archidoc follows a three-layer architecture:
 
 1. **Types** (`archidoc-types`) — shared domain model: `ModuleDoc`, `C4Level`, `FileEntry`, `Relationship`, `PatternStatus`, `HealthStatus`
 2. **Adapters** (`archidoc-rust`, `archidoc-ts`) — language-specific parsers that extract annotations and emit `ModuleDoc` arrays
-3. **Engine** (`archidoc-engine`) — language-agnostic generators that consume `ModuleDoc` and produce markdown, diagrams, IR, drift reports, and health summaries
+3. **Engine** (`archidoc-engine`) — language-agnostic generators that consume `ModuleDoc` and produce ARCHITECTURE.md, diagrams, IR, drift reports, and health summaries
 
-The CLI orchestrates: adapter parses source -> engine generates outputs.
+The CLI orchestrates: adapter parses source -> engine generates ARCHITECTURE.md.
 
 ### JSON IR
 
@@ -180,21 +205,26 @@ The intermediate representation (`ModuleDoc[]` as JSON) is the contract between 
 
 ## Writing a Language Adapter
 
-See [How to Write a Language Adapter](adapters/how-to-write-a-language-adapter.md) for the full guide.
+To add support for a new language:
 
-In short: scan entry files, extract annotations, emit `ModuleDoc[]` JSON to stdout. The engine handles the rest.
+1. Scaffold with `archidoc init-adapter --lang python`
+2. Implement a parser that extracts annotations from your language's comment format
+3. Implement a walker that traverses source directories and collects `ModuleDoc` entries
+4. Emit `ModuleDoc[]` JSON to stdout — the engine handles the rest
+
+See the `archidoc-rust` and `archidoc-ts` adapters for reference implementations.
 
 ## Tests
 
 ```bash
-# Run all Rust tests (79 tests)
+# Run all Rust tests (131 tests)
 cargo test
 
-# Run TypeScript adapter tests (35 tests)
+# Run TypeScript adapter tests (54 tests)
 cd adapters/archidoc-ts && npm test
 ```
 
-114 tests total across both platforms.
+185 tests total across both platforms.
 
 The test suite uses Dave Farley-style BDD: declarative test cases specify WHAT (behavior), protocol drivers translate to HOW (implementation). When the implementation changes, update drivers — not tests.
 

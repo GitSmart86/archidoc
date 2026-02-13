@@ -10,14 +10,18 @@ use crate::fakes::fake_source_tree::FakeSourceTree;
 /// In-memory architecture driver for unit tests.
 ///
 /// Combines the full pipeline: creates annotated files in a temp dir,
-/// runs the real parser, then runs the real generators to a temp output dir.
-/// Assertions check both the parsed IR and the generated output files.
+/// runs the real parser, then generates ARCHITECTURE.md content in memory.
+/// Assertions check the parsed IR and the generated ARCHITECTURE.md string.
 pub struct InMemoryArchitectureDriver {
     source_tree: FakeSourceTree,
     results: Vec<ModuleDoc>,
+    architecture_content: Option<String>,
     output_dir: TempDir,
     compiled: bool,
     ir_json: Option<String>,
+    suggestion_output: Option<String>,
+    ir_snapshots: std::collections::HashMap<String, String>,
+    merged_results: Option<Vec<ModuleDoc>>,
 }
 
 impl InMemoryArchitectureDriver {
@@ -25,9 +29,13 @@ impl InMemoryArchitectureDriver {
         Self {
             source_tree: FakeSourceTree::new(),
             results: Vec::new(),
+            architecture_content: None,
             output_dir: TempDir::new().expect("failed to create output temp dir"),
             compiled: false,
             ir_json: None,
+            suggestion_output: None,
+            ir_snapshots: std::collections::HashMap::new(),
+            merged_results: None,
         }
     }
 
@@ -44,21 +52,21 @@ impl InMemoryArchitectureDriver {
             })
     }
 
-    fn design_dir(&self) -> PathBuf {
-        self.output_dir.path().join("design")
+    fn arch_content(&self) -> &str {
+        self.architecture_content
+            .as_deref()
+            .expect("ARCHITECTURE.md not generated — call compile() first")
     }
 
-    fn c4_dir(&self) -> PathBuf {
-        self.output_dir.path().join("c4")
+    fn arch_file_path(&self) -> PathBuf {
+        self.output_dir.path().join("ARCHITECTURE.md")
     }
 
-    fn drawio_dir(&self) -> PathBuf {
-        self.output_dir.path().join("drawio")
-    }
-
-    fn read_file(&self, path: &PathBuf) -> String {
-        fs::read_to_string(path)
-            .unwrap_or_else(|_| panic!("failed to read: {}", path.display()))
+    fn generate_architecture(&mut self) {
+        let content = archidoc_engine::architecture::generate(&self.results);
+        fs::write(self.arch_file_path(), &content)
+            .expect("failed to write ARCHITECTURE.md");
+        self.architecture_content = Some(content);
     }
 }
 
@@ -68,24 +76,9 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
     }
 
     fn compile(&mut self) {
-        // Parse
-        self.results = archidoc_rust::walker::extract_all_docs(self.source_tree.root());
-
-        // Generate
-        let design = self.design_dir();
-        let c4 = self.c4_dir();
-        let drawio = self.drawio_dir();
-
-        fs::create_dir_all(&design).expect("failed to create design dir");
-        fs::create_dir_all(&c4).expect("failed to create c4 dir");
-        fs::create_dir_all(&drawio).expect("failed to create drawio dir");
-
-        archidoc_engine::markdown::generate_all(&design, &self.results);
-        archidoc_engine::mermaid::generate_container(&c4, &self.results);
-        archidoc_engine::mermaid::generate_component(&c4, &self.results);
-        archidoc_engine::drawio::generate_container_csv(&drawio, &self.results);
-        archidoc_engine::drawio::generate_component_csv(&drawio, &self.results);
-
+        let src_dir = self.source_tree.root().join("src");
+        self.results = archidoc_rust::walker::extract_all_docs(&src_dir);
+        self.generate_architecture();
         self.compiled = true;
     }
 
@@ -93,48 +86,37 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
         &self.results
     }
 
-    // --- Documentation ---
+    // --- ARCHITECTURE.md ---
 
-    fn confirm_documentation_exists(&self, name: &str) {
-        let path = self.design_dir().join(format!("{}.md", name));
+    fn confirm_architecture_produced(&self) {
         assert!(
-            path.exists(),
-            "documentation not produced for '{}': {}",
-            name, path.display()
+            self.architecture_content.is_some(),
+            "ARCHITECTURE.md not produced — was compile() called?"
         );
     }
 
-    fn confirm_documentation_describes(&self, name: &str, expected_content: &str) {
-        let path = self.design_dir().join(format!("{}.md", name));
-        let content = self.read_file(&path);
+    fn confirm_architecture_contains(&self, expected: &str) {
+        let content = self.arch_content();
         assert!(
-            content.contains(expected_content),
-            "documentation for '{}' does not describe '{}'. Content:\n{}",
-            name, expected_content, content
+            content.contains(expected),
+            "ARCHITECTURE.md does not contain '{}'. Content:\n{}",
+            expected, content
         );
-    }
-
-    fn confirm_index_exists(&self) {
-        let path = self.design_dir().join("_intro.md");
-        assert!(path.exists(), "architecture index not produced");
     }
 
     fn confirm_index_lists(&self, name: &str) {
-        let path = self.design_dir().join("_intro.md");
-        let content = self.read_file(&path);
+        let content = self.arch_content();
         assert!(
             content.contains(name),
-            "architecture index does not list '{}'. Content:\n{}",
+            "component index does not list '{}'. Content:\n{}",
             name, content
         );
     }
 
-    // --- Diagrams ---
+    // --- Diagrams (inline in ARCHITECTURE.md) ---
 
     fn confirm_diagram_shows_container(&self, container: &str) {
-        let path = self.c4_dir().join("c4-container.md");
-        let content = self.read_file(&path);
-        // Mermaid IDs use underscores
+        let content = self.arch_content();
         let mermaid_id = container.replace('.', "_");
         assert!(
             content.contains(&mermaid_id),
@@ -144,8 +126,7 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
     }
 
     fn confirm_diagram_shows_component(&self, component: &str, inside: &str) {
-        let path = self.c4_dir().join("c4-component.md");
-        let content = self.read_file(&path);
+        let content = self.arch_content();
         let mermaid_id = component.replace('.', "_");
         assert!(
             content.contains(&mermaid_id),
@@ -162,30 +143,14 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
     }
 
     fn confirm_diagram_shows_dependency(&self, from: &str, to: &str) {
-        let container_path = self.c4_dir().join("c4-container.md");
-        let component_path = self.c4_dir().join("c4-component.md");
-
-        let container_content = fs::read_to_string(&container_path).unwrap_or_default();
-        let component_content = fs::read_to_string(&component_path).unwrap_or_default();
-        let combined = format!("{}\n{}", container_content, component_content);
-
+        let content = self.arch_content();
         let from_id = from.replace('.', "_");
         let to_id = to.replace('.', "_");
         let rel_pattern = format!("Rel({}, {}", from_id, to_id);
         assert!(
-            combined.contains(&rel_pattern),
-            "no dependency arrow from '{}' to '{}' in diagrams (looked for '{}')",
+            content.contains(&rel_pattern),
+            "no dependency arrow from '{}' to '{}' in ARCHITECTURE.md (looked for '{}')",
             from, to, rel_pattern
-        );
-    }
-
-    fn confirm_export_produced(&self, level: &str) {
-        let filename = format!("c4-{}.csv", level);
-        let path = self.drawio_dir().join(&filename);
-        assert!(
-            path.exists(),
-            "export not produced for level '{}': {}",
-            level, path.display()
         );
     }
 
@@ -270,8 +235,6 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
             });
 
         if !design_pattern.is_empty() {
-            // Reconstruct combined form "Pattern (status)" for comparison
-            // when the expected string includes a parenthetical confidence
             let actual = if design_pattern.contains('(') {
                 format!("{} ({})", entry.pattern, entry.pattern_status)
             } else {
@@ -429,9 +392,8 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
     // =========================================================================
 
     fn modify_source_annotation(&mut self, name: &str, new_purpose: &str) {
-        // Re-create the source file with a different description
         let content = format!(
-            "# {} <<container>>\n\n{}\n",
+            "@c4 container\n\n# {}\n\n{}\n",
             name.split('.').last().unwrap_or(name),
             new_purpose
         );
@@ -439,9 +401,9 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
     }
 
     fn check_for_drift(&self) -> DriftReport {
-        // Re-parse from the (possibly modified) source tree
-        let fresh_docs = archidoc_rust::walker::extract_all_docs(self.source_tree.root());
-        archidoc_engine::check::check_drift(&fresh_docs, self.output_dir.path())
+        let src_dir = self.source_tree.root().join("src");
+        let fresh_docs = archidoc_rust::walker::extract_all_docs(&src_dir);
+        archidoc_engine::check::check_drift(&fresh_docs, &self.arch_file_path())
     }
 
     fn confirm_drift_detected(&self) {
@@ -482,35 +444,8 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
         let json = self.ir_json().to_string();
         let docs = archidoc_engine::ir::deserialize(&json)
             .expect("failed to deserialize IR");
-
         self.results = docs;
-
-        // Regenerate all outputs from deserialized IR
-        let design = self.design_dir();
-        let c4 = self.c4_dir();
-        let drawio = self.drawio_dir();
-
-        // Clear previous output
-        if design.exists() {
-            fs::remove_dir_all(&design).ok();
-        }
-        if c4.exists() {
-            fs::remove_dir_all(&c4).ok();
-        }
-        if drawio.exists() {
-            fs::remove_dir_all(&drawio).ok();
-        }
-
-        fs::create_dir_all(&design).expect("failed to create design dir");
-        fs::create_dir_all(&c4).expect("failed to create c4 dir");
-        fs::create_dir_all(&drawio).expect("failed to create drawio dir");
-
-        archidoc_engine::markdown::generate_all(&design, &self.results);
-        archidoc_engine::mermaid::generate_container(&c4, &self.results);
-        archidoc_engine::mermaid::generate_component(&c4, &self.results);
-        archidoc_engine::drawio::generate_container_csv(&drawio, &self.results);
-        archidoc_engine::drawio::generate_component_csv(&drawio, &self.results);
-
+        self.generate_architecture();
         self.compiled = true;
     }
 
@@ -575,43 +510,17 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
             .expect("failed to read IR from file — was write_ir_to_file called?");
         let docs = archidoc_engine::ir::deserialize(&json)
             .expect("failed to deserialize IR from file");
-
         self.results = docs;
-
-        // Regenerate all outputs from deserialized IR
-        let design = self.design_dir();
-        let c4 = self.c4_dir();
-        let drawio = self.drawio_dir();
-
-        if design.exists() { fs::remove_dir_all(&design).ok(); }
-        if c4.exists() { fs::remove_dir_all(&c4).ok(); }
-        if drawio.exists() { fs::remove_dir_all(&drawio).ok(); }
-
-        fs::create_dir_all(&design).expect("failed to create design dir");
-        fs::create_dir_all(&c4).expect("failed to create c4 dir");
-        fs::create_dir_all(&drawio).expect("failed to create drawio dir");
-
-        archidoc_engine::markdown::generate_all(&design, &self.results);
-        archidoc_engine::mermaid::generate_container(&c4, &self.results);
-        archidoc_engine::mermaid::generate_component(&c4, &self.results);
-        archidoc_engine::drawio::generate_container_csv(&drawio, &self.results);
-        archidoc_engine::drawio::generate_component_csv(&drawio, &self.results);
-
+        self.generate_architecture();
         self.compiled = true;
     }
 
     fn confirm_ir_idempotent(&mut self) {
-        // Capture first IR emission
         let first_ir = self.ir_json().to_string();
-
-        // Compile from that IR
         let docs = archidoc_engine::ir::deserialize(&first_ir)
             .expect("failed to deserialize first IR");
         self.results = docs;
-
-        // Emit IR again
         let second_ir = archidoc_engine::ir::serialize(&self.results);
-
         assert_eq!(
             first_ir, second_ir,
             "IR is not idempotent — second emission differs from first"
@@ -660,6 +569,88 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
             "expected '{}' in fitness failures but found: {:?}",
             failing_module,
             result.failures.iter().map(|f| &f.module_path).collect::<Vec<_>>()
+        );
+    }
+
+    // =========================================================================
+    // Phase L — Annotation scaffolding
+    // =========================================================================
+
+    fn suggest_for(&mut self, element: &str) {
+        let module_dir = self.source_tree.module_dir(element);
+        self.suggestion_output = Some(archidoc_engine::suggest::suggest_annotation(&module_dir));
+    }
+
+    fn suggestion_output(&self) -> &str {
+        self.suggestion_output
+            .as_deref()
+            .expect("suggestion not generated yet — call suggest_for() first")
+    }
+
+    fn confirm_suggestion_level(&self, level: &str) {
+        let output = self.suggestion_output();
+        let marker = format!("@c4 {}", level);
+        assert!(
+            output.contains(&marker),
+            "suggestion does not contain level '{}' (looked for '{}'). Output:\n{}",
+            level, marker, output
+        );
+    }
+
+    fn confirm_suggestion_lists_file(&self, filename: &str) {
+        let output = self.suggestion_output();
+        let pattern = format!("`{}`", filename);
+        assert!(
+            output.contains(&pattern),
+            "suggestion does not list file '{}'. Output:\n{}",
+            filename, output
+        );
+    }
+
+    // =========================================================================
+    // Phase L — IR merging
+    // =========================================================================
+
+    fn save_ir_snapshot(&mut self, name: &str) {
+        assert!(self.compiled, "must compile before saving IR snapshot");
+        let json = archidoc_engine::ir::serialize(&self.results);
+        self.ir_snapshots.insert(name.to_string(), json);
+    }
+
+    fn merge_ir_snapshots(&mut self, names: &[&str]) {
+        let ir_sets: Vec<Vec<ModuleDoc>> = names.iter().map(|name| {
+            let json = self.ir_snapshots.get(*name)
+                .unwrap_or_else(|| panic!("IR snapshot '{}' not found", name));
+            archidoc_engine::ir::deserialize(json)
+                .unwrap_or_else(|e| panic!("failed to deserialize snapshot '{}': {}", name, e))
+        }).collect();
+
+        match archidoc_engine::merge::merge_ir(ir_sets) {
+            Ok(docs) => self.merged_results = Some(docs),
+            Err(e) => panic!("merge failed: {}", e),
+        }
+    }
+
+    fn confirm_merged_element_count(&self, expected: usize) {
+        let merged = self.merged_results.as_ref()
+            .expect("no merged results — call merge_ir_snapshots first");
+        assert_eq!(
+            merged.len(), expected,
+            "expected {} merged elements, got {}. Elements: {:?}",
+            expected, merged.len(),
+            merged.iter().map(|d| &d.module_path).collect::<Vec<_>>()
+        );
+    }
+
+    fn confirm_merged_contains(&self, name: &str, level: &str) {
+        let merged = self.merged_results.as_ref()
+            .expect("no merged results — call merge_ir_snapshots first");
+        let found = merged.iter().any(|d| d.module_path == name && d.c4_level.to_string() == level);
+        assert!(
+            found,
+            "merged IR does not contain '{}' at level '{}'. Elements: {:?}",
+            name, level,
+            merged.iter().map(|d| format!("{} ({})", d.module_path, d.c4_level)).collect::<Vec<_>>()
         );
     }
 }

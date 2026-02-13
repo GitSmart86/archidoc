@@ -1,5 +1,6 @@
 #![allow(rustdoc::invalid_html_tags)]
-//! # Extract Docs Types <<component>>
+//! @c4 component
+//! # Extract Docs Types
 //!
 //! Shared type definitions for the archidoc toolchain.
 //!

@@ -38,10 +38,12 @@ pub fn archidoc_from_file(path: &Path) -> Option<String> {
 }
 
 /// Extract the C4 level marker from doc content.
+///
+/// Uses `@c4 container` / `@c4 component` syntax.
 pub fn extract_c4_level(content: &str) -> C4Level {
-    if content.contains("<<container>>") {
+    if content.contains("@c4 container") {
         C4Level::Container
-    } else if content.contains("<<component>>") {
+    } else if content.contains("@c4 component") {
         C4Level::Component
     } else {
         C4Level::Unknown
@@ -62,6 +64,8 @@ pub fn extract_pattern(content: &str) -> String {
         "Repository",
         "Singleton",
         "Factory",
+        "Builder",
+        "Decorator",
         "Active Object",
         "Memento",
         "Command",
@@ -101,7 +105,7 @@ pub fn extract_description(content: &str) -> String {
             let trimmed = l.trim();
             !trimmed.is_empty()
                 && !trimmed.starts_with('#')
-                && !trimmed.contains("<<")
+                && !trimmed.starts_with("@c4 ")
                 && !trimmed.starts_with('|')
                 && !trimmed.starts_with("GoF:")
         })
@@ -210,27 +214,29 @@ fn parse_pattern_field(field: &str) -> (String, PatternStatus) {
     }
 }
 
-/// Parse `<<uses: target, "label", "protocol">>` markers from content.
+/// Parse `@c4 uses target "label" "protocol"` markers from content.
 pub fn extract_relationships(content: &str) -> Vec<Relationship> {
     let mut rels = Vec::new();
 
     for line in content.lines() {
         let trimmed = line.trim();
-        if let Some(inner) = trimmed
-            .strip_prefix("<<uses:")
-            .and_then(|s| s.strip_suffix(">>"))
-        {
-            // Parse: target, "label", "protocol"
-            let parts: Vec<&str> = inner.splitn(3, ',').collect();
-            if parts.len() >= 3 {
-                let target = parts[0].trim().to_string();
-                let label = parts[1].trim().trim_matches('"').to_string();
-                let protocol = parts[2].trim().trim_matches('"').to_string();
-                rels.push(Relationship {
-                    target,
-                    label,
-                    protocol,
-                });
+        if let Some(rest) = trimmed.strip_prefix("@c4 uses ") {
+            // Parse: target "label" "protocol"
+            // Split on first quote to get target, then extract quoted strings
+            if let Some(quote_start) = rest.find('"') {
+                let target = rest[..quote_start].trim().to_string();
+                let quoted_part = &rest[quote_start..];
+                let quotes: Vec<&str> = quoted_part
+                    .split('"')
+                    .filter(|s| !s.trim().is_empty())
+                    .collect();
+                if quotes.len() >= 2 {
+                    rels.push(Relationship {
+                        target,
+                        label: quotes[0].to_string(),
+                        protocol: quotes[1].to_string(),
+                    });
+                }
             }
         }
     }

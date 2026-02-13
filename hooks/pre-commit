@@ -1,0 +1,24 @@
+#!/bin/bash
+# archidoc pre-commit hook — fail if architecture docs are out of sync
+#
+# Install:
+#   cp hooks/pre-commit .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# Or use git config:
+#   git config core.hooksPath hooks
+
+if ! command -v archidoc &> /dev/null; then
+    echo "archidoc not found, skipping drift check"
+    exit 0
+fi
+
+archidoc --check . 2>&1
+status=$?
+
+if [ $status -ne 0 ]; then
+    echo ""
+    echo "Architecture docs are out of sync with source annotations."
+    echo "Run 'archidoc .' to regenerate, then commit again."
+    exit 1
+fi

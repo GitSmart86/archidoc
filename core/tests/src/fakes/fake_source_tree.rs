@@ -80,10 +80,11 @@ impl FakeSourceTree {
     }
 
     /// Get the directory for a module path.
-    fn module_dir(&self, module_path: &str) -> PathBuf {
+    pub fn module_dir(&self, module_path: &str) -> PathBuf {
         let root = self.temp_dir.path();
         let parts: Vec<&str> = module_path.split('.').collect();
         let mut path = root.to_path_buf();
+        path.push("src"); // Add src/ to match real Rust project structure
         for part in &parts {
             path.push(part);
         }
@@ -95,11 +96,12 @@ impl FakeSourceTree {
         let root = self.temp_dir.path();
 
         if module_path == "_lib" {
-            return root.join("lib.rs");
+            return root.join("src").join("lib.rs");
         }
 
         let parts: Vec<&str> = module_path.split('.').collect();
         let mut path = root.to_path_buf();
+        path.push("src"); // Add src/ to match real Rust project structure
         for part in &parts {
             path.push(part);
         }

@@ -9,25 +9,53 @@ use crate::path_resolver;
 
 /// Walk a source tree and extract ModuleDocs from all module entry files.
 ///
-/// Finds `lib.rs` and `mod.rs` files, extracts `//!` doc comments,
-/// and builds ModuleDoc structs from the parsed annotations.
+/// Finds `lib.rs`, `mod.rs`, and flat `.rs` module files with archidoc annotations,
+/// extracts `//!` doc comments, and builds ModuleDoc structs from the parsed annotations.
+///
+/// Flat module support: A `.rs` file that is not `mod.rs` or `lib.rs` is included
+/// if it contains archidoc annotations (C4 markers: `@c4 container` or `@c4 component`).
 pub fn extract_all_docs(root: &Path) -> Vec<ModuleDoc> {
     let mut docs = Vec::new();
+    let mut seen_modules = std::collections::HashSet::new();
 
     for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
 
+        // Skip target directories
+        if path.components().any(|c| c.as_os_str() == "target") {
+            continue;
+        }
+
+        // Only process .rs files
         let filename = match path.file_name().and_then(|n| n.to_str()) {
-            Some(name) if name == "lib.rs" || name == "mod.rs" => name,
+            Some(name) if name.ends_with(".rs") => name,
             _ => continue,
         };
 
+        // Extract archidoc content
         let content = match parser::archidoc_from_file(path) {
             Some(c) if !c.trim().is_empty() => c,
             _ => continue,
         };
 
+        // For non-standard entry files, require C4 markers
+        let is_standard_entry = filename == "lib.rs" || filename == "mod.rs";
+        if !is_standard_entry {
+            let has_c4_marker = content.contains("@c4 container")
+                || content.contains("@c4 component");
+            if !has_c4_marker {
+                continue;
+            }
+        }
+
         let module_path = path_resolver::path_to_module_name(path, root, filename);
+
+        // Skip duplicate module paths (e.g., both src/foo/mod.rs and src/foo.rs exist)
+        // mod.rs takes priority
+        if !seen_modules.insert(module_path.clone()) {
+            continue;
+        }
+
         let c4_level = parser::extract_c4_level(&content);
         let pattern = parser::extract_pattern(&content);
         let pattern_status = parser::extract_pattern_status(&content);

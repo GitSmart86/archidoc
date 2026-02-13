@@ -25,6 +25,8 @@ const GOF_PATTERNS = [
   "Repository",
   "Singleton",
   "Factory",
+  "Builder",
+  "Decorator",
   "Active Object",
   "Memento",
   "Command",
@@ -135,6 +137,133 @@ export function extractRelationships(content: string): Relationship[] {
     });
   }
   return rels;
+}
+
+/**
+ * Extract import relationships from TypeScript import/export statements.
+ *
+ * Parses `import ... from "path"` and `export ... from "path"` and converts
+ * them to relationships. Only processes imports that navigate UP the directory
+ * tree (using ..), indicating cross-module dependencies.
+ *
+ * Internal imports within the same module (./file or ./subdir/file) are ignored.
+ *
+ * @param content - File content to scan for imports
+ * @param currentModulePath - Dot-notation module path (e.g., "dashboard.charts")
+ * @returns Array of relationships representing imports
+ */
+export function extractImportRelationships(
+  content: string,
+  currentModulePath: string
+): Relationship[] {
+  const rels: Relationship[] = [];
+
+  // Match both import and export statements with relative paths
+  const importRe = /(?:import|export)\s+(?:{[^}]*}|\*\s+as\s+\w+|\w+)\s+from\s+["'](\.[^"']+)["']/g;
+  let match;
+
+  while ((match = importRe.exec(content)) !== null) {
+    const importPath = match[1];
+
+    // Only process imports that go UP the tree (..)
+    // ./file and ./subdir/file are internal to the current module
+    if (!importPath.startsWith("..")) {
+      continue;
+    }
+
+    // Convert relative path to module path
+    const targetModule = resolveImportPath(importPath, currentModulePath);
+
+    // Only add if it resolves to a different module
+    if (targetModule && targetModule !== currentModulePath) {
+      rels.push({
+        target: targetModule,
+        label: "imports",
+        protocol: "ES module",
+      });
+    }
+  }
+
+  // Deduplicate by target
+  const seen = new Set<string>();
+  return rels.filter((r) => {
+    if (seen.has(r.target)) return false;
+    seen.add(r.target);
+    return true;
+  });
+}
+
+/**
+ * Resolve a relative import path to a module path.
+ *
+ * Examples:
+ * - "../events" from "dashboard.charts" -> "dashboard.events"
+ * - "./submodule" from "dashboard" -> "dashboard.submodule"
+ * - "../../core" from "dashboard.charts.axis" -> "core"
+ *
+ * @param importPath - Relative import path from source
+ * @param currentModule - Current module in dot notation
+ * @returns Resolved module path or null if invalid
+ */
+function resolveImportPath(importPath: string, currentModule: string): string | null {
+  // Remove file extensions and /index suffix
+  let cleanPath = importPath
+    .replace(/\.(ts|js|tsx|jsx)$/, "")
+    .replace(/\/index$/, "");
+
+  // Split current module into parts
+  const currentParts = currentModule ? currentModule.split(".") : [];
+
+  // Parse the import path
+  const segments = cleanPath.split("/").filter(s => s);
+
+  let workingParts = [...currentParts];
+
+  for (const segment of segments) {
+    if (segment === "..") {
+      // Go up one level
+      if (workingParts.length > 0) {
+        workingParts.pop();
+      }
+    } else if (segment === ".") {
+      // Current directory - no change
+      continue;
+    } else {
+      // Add to path
+      workingParts.push(segment);
+    }
+  }
+
+  return workingParts.length > 0 ? workingParts.join(".") : null;
+}
+
+/**
+ * Merge explicit @c4 uses relationships with auto-discovered import relationships.
+ *
+ * Explicit relationships take priority - if a target is already declared with
+ * @c4 uses, the import relationship is ignored.
+ *
+ * @param explicitRels - Relationships from @c4 uses tags
+ * @param importRels - Relationships from import statements
+ * @returns Merged array with no duplicate targets
+ */
+export function mergeRelationships(
+  explicitRels: Relationship[],
+  importRels: Relationship[]
+): Relationship[] {
+  const explicitTargets = new Set(explicitRels.map((r) => r.target));
+
+  // Start with all explicit relationships
+  const merged = [...explicitRels];
+
+  // Add import relationships that aren't already declared
+  for (const importRel of importRels) {
+    if (!explicitTargets.has(importRel.target)) {
+      merged.push(importRel);
+    }
+  }
+
+  return merged;
 }
 
 /**

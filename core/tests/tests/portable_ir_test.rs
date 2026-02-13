@@ -79,8 +79,9 @@ fn documentation_can_be_generated_from_ir_alone() {
     arch.emit_ir();
     arch.compile_from_ir();
 
-    arch.assert_documentation_exists(&["name: bus"]);
-    arch.assert_documentation_exists(&["name: bus.calc"]);
+    arch.assert_architecture_produced();
+    arch.assert_architecture_contains(&["contains: bus"]);
+    arch.assert_architecture_contains(&["contains: bus.calc"]);
     arch.assert_diagram_shows_container(&["name: bus"]);
     arch.assert_diagram_shows_component(&["name: bus.calc", "inside: bus"]);
 }

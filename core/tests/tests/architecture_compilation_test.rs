@@ -21,8 +21,8 @@ fn annotated_container_produces_documentation_and_diagram() {
     ]);
     arch.compile();
 
-    arch.assert_documentation_exists(&["name: bus"]);
-    arch.assert_documentation_describes(&["name: bus", "describes: Central messaging backbone"]);
+    arch.assert_architecture_produced();
+    arch.assert_architecture_contains(&["contains: Central messaging backbone"]);
     arch.assert_diagram_shows_container(&["name: bus"]);
     arch.assert_element_level(&["name: bus", "level: container"]);
     arch.assert_design_pattern(&["name: bus", "design_pattern: Mediator"]);
@@ -79,29 +79,7 @@ fn compiled_architecture_produces_navigable_index() {
     ]);
     arch.compile();
 
-    arch.assert_index_exists();
+    arch.assert_architecture_produced();
     arch.assert_index_lists(&["name: engine"]);
     arch.assert_index_lists(&["name: bus"]);
-}
-
-// =========================================================================
-// Diagram exports for external tools
-// =========================================================================
-
-#[test]
-fn compiled_architecture_exports_diagrams_for_external_tools() {
-    let mut arch = ArchitectureDsl::setup();
-
-    arch.annotate_container(&[
-        "name: bus",
-        "purpose: Central messaging backbone",
-    ]);
-    arch.annotate_component(&[
-        "name: bus.calc",
-        "purpose: Indicator calculations",
-    ]);
-    arch.compile();
-
-    arch.assert_export_produced(&["level: container"]);
-    arch.assert_export_produced(&["level: component"]);
 }

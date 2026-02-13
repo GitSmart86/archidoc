@@ -43,7 +43,16 @@ export function extractAllDocs(root: string): ModuleDoc[] {
     const patternStatus = parser.extractPatternStatus(jsDoc);
     const description = parser.extractDescription(jsDoc);
     const parentContainer = parser.extractParentContainer(modulePath);
-    const relationships = parser.extractRelationships(jsDoc);
+
+    // Extract explicit relationships from JSDoc
+    const explicitRels = parser.extractRelationships(jsDoc);
+
+    // Extract import relationships from file content
+    const importRels = parser.extractImportRelationships(content, modulePath);
+
+    // Merge: explicit takes priority
+    const relationships = parser.mergeRelationships(explicitRels, importRels);
+
     const files = parser.extractFileTable(jsDoc);
 
     docs.push({

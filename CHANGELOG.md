@@ -5,7 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] - 2025-02-12
+## [Unreleased] — v0.2.0
+
+### Changed
+
+- **Single ARCHITECTURE.md output** — `archidoc .` now generates one file with inline Mermaid diagrams, a component index table linking to source files, and a relationship map. Replaces the old `docs/generated/` directory tree (per-module `.md` files, separate diagram files).
+- **Default output path** changed from `docs/generated/` to `ARCHITECTURE.md`
+- **Drift detection** simplified to single-file comparison against ARCHITECTURE.md
+- **PlantUML and draw.io** are now opt-in sidecar outputs (`--plantuml`, `--drawio`)
+- **`@c4` syntax only** — removed deprecated `<<container>>`/`<<component>>`/`<<uses:...>>` syntax with no backwards compatibility
+
+### Added
+
+- CLI: clap-based argument parsing with `--output/-o`, `--quiet/--verbose`, `--json` flags
+- CLI: `init-adapter` subcommand to scaffold new language adapters
+- CLI: `suggest` subcommand to generate annotation templates for unannotated directories
+- CLI: `--merge-ir` flag for combining IR from multiple language adapters (polyglot projects)
+- CLI: first-run guidance when no annotated modules are found
+- Engine: PlantUML C4 diagram output (`--plantuml`)
+- Engine: IR merging for polyglot projects
+- Engine: annotation scaffolding (`suggest`)
+- Rust adapter: flat crate support (`src/foo.rs` alongside `src/foo/mod.rs`)
+- Rust adapter: `cargo-modules` integration for C5/C6 extraction
+- Rust adapter: pattern heuristics for 9 GoF patterns (Observer, Strategy, Facade, Builder, Factory, Adapter, Decorator, Singleton, Command)
+- TypeScript adapter: auto-discovery of import/export relationships between modules
+- Documentation: annotation spec, annotation RFC, LLM guide, annotating-your-project guide
+- Examples: annotated Rust and TypeScript example projects
+
+### Removed
+
+- `--emit-context` flag (merged into default `archidoc .` output)
+- `markdown.rs` (per-module .md generation)
+- `context.rs` (consolidated context generation — replaced by `architecture.rs`)
+- `<<container>>`/`<<component>>`/`<<uses:...>>` annotation syntax
+
+## [0.1.0] - 2026-02-12
 
 ### Added
 
@@ -18,6 +52,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture health reporting (`--health`): aggregates file maturity and pattern confidence
 - File table validation (`--validate`): detects ghost entries and orphan files
 - Pattern validation: structural heuristics for Observer, Strategy, and Facade patterns with automatic planned-to-verified promotion
-- BDD test infrastructure: DSL (Facade), protocol drivers (Strategy), and fakes — 79 Rust tests + 35 TypeScript tests
+- BDD test infrastructure: DSL (Facade), protocol drivers (Strategy), and fakes
 - Cross-language pipeline: any adapter emitting conforming JSON IR can use the full engine
 - Language adapter guide with working Python example

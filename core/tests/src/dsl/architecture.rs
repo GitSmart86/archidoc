@@ -149,24 +149,17 @@ impl ArchitectureDsl {
     // Assertions — verify user-visible outcomes
     // =========================================================================
 
-    /// Assert documentation was produced for a named element.
-    /// Format: "name: bus"
-    pub fn assert_documentation_exists(&self, args: &[&str]) {
-        let params = Params::parse(args);
-        self.driver.confirm_documentation_exists(&params.get("name"));
+    /// Assert ARCHITECTURE.md was produced.
+    pub fn assert_architecture_produced(&self) {
+        self.driver.confirm_architecture_produced();
     }
 
-    /// Assert documentation describes expected content.
-    /// Format: "name: bus, describes: Central messaging backbone"
-    pub fn assert_documentation_describes(&self, args: &[&str]) {
+    /// Assert ARCHITECTURE.md contains expected text.
+    /// Format: "contains: Central messaging backbone"
+    pub fn assert_architecture_contains(&self, args: &[&str]) {
         let params = Params::parse(args);
         self.driver
-            .confirm_documentation_describes(&params.get("name"), &params.get("describes"));
-    }
-
-    /// Assert the architecture index was produced.
-    pub fn assert_index_exists(&self) {
-        self.driver.confirm_index_exists();
+            .confirm_architecture_contains(&params.get("contains"));
     }
 
     /// Assert the architecture index lists an element.
@@ -199,13 +192,6 @@ impl ArchitectureDsl {
         let params = Params::parse(args);
         self.driver
             .confirm_diagram_shows_dependency(&params.get("from"), &params.get("to"));
-    }
-
-    /// Assert a diagram export was produced.
-    /// Format: "level: container"
-    pub fn assert_export_produced(&self, args: &[&str]) {
-        let params = Params::parse(args);
-        self.driver.confirm_export_produced(&params.get("level"));
     }
 
     /// Assert an element's C4 level.
@@ -462,6 +448,61 @@ impl ArchitectureDsl {
     }
 
     // =========================================================================
+    // Phase L — Annotation scaffolding
+    // =========================================================================
+
+    /// Generate an annotation template for an element's directory.
+    /// Format: "element: api"
+    pub fn suggest_for(&mut self, args: &[&str]) {
+        let params = Params::parse(args);
+        self.driver.suggest_for(&params.get("element"));
+    }
+
+    /// Assert the suggestion output infers the expected C4 level.
+    /// Format: "level: container"
+    pub fn assert_suggestion_level(&self, args: &[&str]) {
+        let params = Params::parse(args);
+        self.driver.confirm_suggestion_level(&params.get("level"));
+    }
+
+    /// Assert the suggestion output lists a source file.
+    /// Format: "file: routes.rs"
+    pub fn assert_suggestion_lists_file(&self, args: &[&str]) {
+        let params = Params::parse(args);
+        self.driver.confirm_suggestion_lists_file(&params.get("file"));
+    }
+
+    // =========================================================================
+    // Phase L — IR merging
+    // =========================================================================
+
+    /// Save the current IR as a named snapshot for later merging.
+    /// Format: "snapshot: rust_ir"
+    pub fn save_ir_as(&mut self, args: &[&str]) {
+        let params = Params::parse(args);
+        self.driver.save_ir_snapshot(&params.get("snapshot"));
+    }
+
+    /// Merge named IR snapshots into a unified set.
+    pub fn merge_ir_snapshots(&mut self, snapshots: &[&str]) {
+        self.driver.merge_ir_snapshots(snapshots);
+    }
+
+    /// Assert the merged IR contains an expected number of elements.
+    /// Format: "count: 5"
+    pub fn assert_merged_element_count(&self, args: &[&str]) {
+        let params = Params::parse(args);
+        self.driver.confirm_merged_element_count(params.get_usize("count"));
+    }
+
+    /// Assert the merged IR contains an element at a given level.
+    /// Format: "name: api, level: container"
+    pub fn assert_merged_contains(&self, args: &[&str]) {
+        let params = Params::parse(args);
+        self.driver.confirm_merged_contains(&params.get("name"), &params.get("level"));
+    }
+
+    // =========================================================================
     // Internal — build source files from accumulated setup
     // =========================================================================
 
@@ -471,7 +512,8 @@ impl ArchitectureDsl {
 
             // Header with C4 marker
             let title = to_title_case(name.split('.').last().unwrap_or(name));
-            content.push_str(&format!("# {} <<{}>>\n\n", title, setup.c4_level));
+            content.push_str(&format!("@c4 {}\n\n", setup.c4_level));
+            content.push_str(&format!("# {}\n\n", title));
 
             // Purpose
             if !setup.purpose.is_empty() {
@@ -495,7 +537,7 @@ impl ArchitectureDsl {
                 .collect();
             for dep in &deps {
                 content.push_str(&format!(
-                    "<<uses: {}, \"{}\", \"{}\">>\n",
+                    "@c4 uses {} \"{}\" \"{}\"\n",
                     dep.to, dep.label, dep.protocol
                 ));
             }

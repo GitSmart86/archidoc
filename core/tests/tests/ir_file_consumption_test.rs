@@ -29,8 +29,9 @@ fn documentation_regenerated_from_ir_file() {
     arch.write_ir_to_file();
     arch.compile_from_ir_file();
 
-    arch.assert_documentation_exists(&["name: bus"]);
-    arch.assert_documentation_exists(&["name: bus.calc"]);
+    arch.assert_architecture_produced();
+    arch.assert_architecture_contains(&["contains: bus"]);
+    arch.assert_architecture_contains(&["contains: bus.calc"]);
     arch.assert_diagram_shows_container(&["name: bus"]);
     arch.assert_diagram_shows_component(&["name: bus.calc", "inside: bus"]);
 }

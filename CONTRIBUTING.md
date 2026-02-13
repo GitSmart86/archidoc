@@ -58,7 +58,7 @@ Each implementation phase follows this cycle:
 ### Phase A: Formalize Convention (Deliverable 1.1)
 
 - [x] A1: Write `c4-annotation-spec.md` — the one-page annotation specification
-- [x] A2: Define `<<container>>`, `<<component>>`, `<<uses: target, "label", "protocol">>` marker syntax
+- [x] A2: Define `@c4 container`, `@c4 component`, `@c4 uses target "label" "protocol"` marker syntax
 - [x] A3: Define file table format (`| File | Pattern | Purpose | Health |`)
 - [x] A4: Define two-tier pattern labels (`planned` / `verified`)
 - [x] A5: Define health indicators (`planned` → `active` → `stable`)
@@ -78,8 +78,8 @@ Each implementation phase follows this cycle:
 
 ### Phase C: Harden Compiler — Relationships (Deliverables 2.1, 2.2)
 
-- [x] C1: Parse `<<uses: target, "label", "protocol">>` markers from `//!` comments
-- [x] C2: Generate `Rel()` arrows in Mermaid C4 diagrams from `<<uses>>` markers
+- [x] C1: Parse `@c4 uses target "label" "protocol"` markers from `//!` comments
+- [x] C2: Generate `Rel()` arrows in Mermaid C4 diagrams from `@c4 uses` markers
 - [x] C3: Remove all hardcoded relationship strings from `mermaid.rs`
 - [x] C4: Remove all hardcoded relationship strings from `drawio.rs`
 - [ ] C5: Integrate `cargo-modules` for import graph extraction (optional validation)

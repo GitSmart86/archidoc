@@ -5,7 +5,10 @@ use archidoc_types::{ModuleDoc, PatternStatus};
 use crate::pattern_heuristic;
 
 /// Recognized patterns that have structural heuristics.
-const VERIFIABLE_PATTERNS: &[&str] = &["Observer", "Strategy", "Facade"];
+const VERIFIABLE_PATTERNS: &[&str] = &[
+    "Observer", "Strategy", "Facade", "Builder", "Factory",
+    "Adapter", "Decorator", "Singleton", "Command",
+];
 
 /// H7: Auto-promote pattern labels from `planned` to `verified`
 /// when structural heuristics pass.

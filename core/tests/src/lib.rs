@@ -1,5 +1,6 @@
 #![allow(rustdoc::invalid_html_tags)]
-//! # Extract Docs Tests <<component>>
+//! @c4 component
+//! # Extract Docs Tests
 //!
 //! BDD test infrastructure — DSL, protocol drivers, fakes.
 //!

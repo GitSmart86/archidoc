@@ -13,7 +13,7 @@ Each `ModuleDoc` represents one architectural element (a C4 container or compone
 ```json
 {
   "module_path": "bus.calc",
-  "content": "# Calc <<component>>\n\nIndicator calculations.\n\nGoF: Strategy\n\n| File | Pattern | Purpose | Health |\n|------|---------|---------|--------|\n| `executor.rs` | -- | Order execution | active |",
+  "content": "@c4 component\n\n# Calc\n\nIndicator calculations.\n\nGoF: Strategy\n\n| File | Pattern | Purpose | Health |\n|------|---------|---------|--------|\n| `executor.rs` | -- | Order execution | active |",
   "source_file": "src/bus/calc/mod.rs",
   "c4_level": "component",
   "pattern": "Strategy",
@@ -41,7 +41,7 @@ Each `ModuleDoc` represents one architectural element (a C4 container or compone
 | `pattern_status` | `"planned"` \| `"verified"` | Whether the pattern is structurally confirmed |
 | `description` | string | First paragraph after the C4 marker |
 | `parent_container` | string \| null | Module path of the parent container, null for top-level |
-| `relationships` | array | Dependencies declared via `<<uses>>` markers |
+| `relationships` | array | Dependencies declared via `@c4 uses` markers |
 | `files` | array | File catalog entries from the module's file table |
 
 ### Enum Constraints
@@ -56,8 +56,8 @@ Your adapter must:
 
 1. **Walk the source tree** to find module entry files (language-specific convention)
 2. **Extract structured documentation** from those files
-3. **Parse C4 markers**: `<<container>>`, `<<component>>`
-4. **Parse relationships**: `<<uses: target, "label", "protocol">>`
+3. **Parse C4 markers**: `@c4 container`, `@c4 component`
+4. **Parse relationships**: `@c4 uses target "label" "protocol"`
 5. **Parse file tables**: `| File | Pattern | Purpose | Health |`
 6. **Derive module paths** from directory hierarchy (dot notation)
 7. **Derive parent containers** from module path nesting
@@ -88,16 +88,16 @@ def walk_modules(root):
             content = f.read()
 
         # Skip files without C4 markers
-        if "<<container>>" not in content and "<<component>>" not in content:
+        if "@c4 container" not in content and "@c4 component" not in content:
             continue
 
         rel_path = os.path.relpath(dirpath, root)
         module_path = rel_path.replace(os.sep, ".")
 
         # Parse C4 level
-        if "<<container>>" in content:
+        if "@c4 container" in content:
             c4_level = "container"
-        elif "<<component>>" in content:
+        elif "@c4 component" in content:
             c4_level = "component"
         else:
             c4_level = "unknown"
@@ -111,7 +111,7 @@ def walk_modules(root):
         description = ""
         for line in lines:
             stripped = line.strip().strip('"').strip("'")
-            if stripped and "<<" not in stripped and not stripped.startswith("#"):
+            if stripped and "@c4" not in stripped and not stripped.startswith("#"):
                 description = stripped
                 break
 
@@ -143,16 +143,16 @@ if __name__ == "__main__":
 python archidoc-py.py ./src > ir.json
 archidoc --from-json-file ir.json --validate-ir
 
-# Generate documentation from IR
-archidoc --from-json-file ir.json ./output-root
+# Generate ARCHITECTURE.md from IR
+archidoc --from-json-file ir.json .
 
 # Pipe directly (Unix)
-python archidoc-py.py ./src | archidoc --from-json
+python archidoc-py.py ./src | archidoc --from-json .
 
 # Combine adapters for polyglot projects
 archidoc --emit-ir ./backend/src > backend-ir.json
 python archidoc-py.py ./services > services-ir.json
-jq -s 'add' backend-ir.json services-ir.json | archidoc --from-json
+archidoc --merge-ir --from-json-file backend-ir.json --from-json-file services-ir.json .
 ```
 
 ## Validating Your Adapter
@@ -167,13 +167,13 @@ jq -s 'add' backend-ir.json services-ir.json | archidoc --from-json
    archidoc --from-json-file ir.json --validate-ir
    ```
 
-3. Generate docs and inspect:
+3. Generate ARCHITECTURE.md and inspect:
    ```bash
-   archidoc --from-json-file ir.json ./test-output
-   ls ./test-output/docs/generated/
+   archidoc --from-json-file ir.json .
+   cat ARCHITECTURE.md
    ```
 
-4. Check that the generated Mermaid diagrams render correctly.
+4. Check that the inline Mermaid diagrams render correctly.
 
 ## Reference Implementation
 
