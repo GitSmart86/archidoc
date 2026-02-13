@@ -1,3 +1,4 @@
+#![allow(rustdoc::invalid_html_tags)]
 //! # Extract Docs Rust <<container>>
 //!
 //! Rust language adapter — parses `//!` annotations from mod.rs/lib.rs files.

@@ -1,6 +1,8 @@
 # archidoc
 
-Architecture documentation compiler. Extracts C4 annotations from source code and generates diagrams, docs, and drift reports.
+<!-- badges: crates.io, npm, CI — add after publishing -->
+
+Your architecture diagrams are always wrong because nobody updates them. archidoc fixes this — it extracts C4 architecture documentation directly from source code annotations, so your diagrams stay in sync with your code. If they drift, `archidoc --check` fails your CI build.
 
 ## What It Does
 
@@ -16,12 +18,20 @@ It also detects **architecture drift** (docs out of sync with code), validates *
 ## Install
 
 ```bash
-# From source
+# From crates.io
+cargo install archidoc-cli
+
+# Or from source
 cargo install --path core/archidoc-cli
 
 # Or build locally
 cargo build --release
 # Binary at target/release/archidoc
+```
+
+```bash
+# TypeScript adapter (npm)
+npm install archidoc-ts
 ```
 
 ## Usage
@@ -100,6 +110,44 @@ Pattern labels have two tiers:
 - **planned** — developer's stated intent
 - **verified** — structurally confirmed by heuristic analysis (Observer, Strategy, Facade)
 
+## Getting Started
+
+To adopt archidoc on an existing project:
+
+1. **Pick your top-level modules** — identify the 3-5 directories that represent your system's major containers (e.g. `api/`, `core/`, `database/`)
+
+2. **Add a C4 marker** to each module's entry file (`mod.rs`, `index.ts`, or `__init__.py`):
+   ```rust
+   //! # Api <<container>>
+   //!
+   //! REST API gateway — handles authentication and request routing.
+   ```
+
+3. **Run archidoc** to generate your first diagrams:
+   ```bash
+   archidoc .
+   ```
+
+4. **Add relationships** between containers:
+   ```rust
+   //! <<uses: database, "Persists user data", "sqlx">>
+   ```
+
+5. **Add file tables** to document each module's internal structure:
+   ```rust
+   //! | File | Pattern | Purpose | Health |
+   //! |------|---------|---------|--------|
+   //! | `routes.rs` | -- | HTTP route handlers | active |
+   //! | `middleware.rs` | Strategy | Auth and rate limiting | stable |
+   ```
+
+6. **Gate your CI** to prevent architecture drift:
+   ```bash
+   archidoc --check .
+   ```
+
+Start with containers only. Add components and file tables as the architecture stabilizes.
+
 ## Project Structure
 
 ```
@@ -139,12 +187,14 @@ In short: scan entry files, extract annotations, emit `ModuleDoc[]` JSON to stdo
 ## Tests
 
 ```bash
-# Run all Rust tests (48 tests)
+# Run all Rust tests (79 tests)
 cargo test
 
 # Run TypeScript adapter tests (35 tests)
 cd adapters/archidoc-ts && npm test
 ```
+
+114 tests total across both platforms.
 
 The test suite uses Dave Farley-style BDD: declarative test cases specify WHAT (behavior), protocol drivers translate to HOW (implementation). When the implementation changes, update drivers — not tests.
 

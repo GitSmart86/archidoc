@@ -180,6 +180,18 @@ pub trait ArchitectureDriver: Send {
     /// Confirm the emitted IR passes schema validation.
     fn confirm_ir_schema_valid(&self);
 
+    /// Confirm that malformed JSON IR is rejected by the validator.
+    fn confirm_ir_rejects(&self, json: &str);
+
+    /// Write the emitted IR to a temporary file on disk.
+    fn write_ir_to_file(&mut self);
+
+    /// Deserialize IR from the previously written file and regenerate all outputs.
+    fn compile_from_ir_file(&mut self);
+
+    /// Confirm emitting IR twice (with a compile-from-IR in between) produces identical JSON.
+    fn confirm_ir_idempotent(&mut self);
+
     // =========================================================================
     // Phase H — Pattern validation
     // =========================================================================

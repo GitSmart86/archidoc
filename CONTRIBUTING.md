@@ -28,10 +28,8 @@ The JSON IR (`ModuleDoc[]`) is the contract between adapters and core. See deliv
 
 When asked to "prepare to implement" or "start implementation":
 
-1. Read `AutoDoc-Docs/archive/rationale/proposal.md` (full methodology + problem solutions + roadmap)
-2. Read `AutoDoc-Docs/archive/rationale/deliverables.md` (deliverables + packaging + value props)
-3. Review the implementation checklist below
-4. Identify which phase to start and confirm with the user
+1. Review the implementation checklist below
+2. Identify which phase to start and confirm with the user
 
 ## Development Cycle
 
@@ -97,9 +95,9 @@ Each implementation phase follows this cycle:
 - [x] D6: Bundled binary mode — adapter pipes directly to core (single `archidoc` command)
 - [x] D7: Validate IR against schema before processing (`--validate-ir`)
 - [x] D8: Write "How to Write a Language Adapter" guide
-- [ ] D9: (backfill) Negative validation tests — reject malformed IR (missing fields, invalid enum values like `"system"` for c4_level)
-- [ ] D10: (backfill) File-based IR consumption test — test `--from-json-file` (D5) through the DSL
-- [ ] D11: (backfill) Double roundtrip stability test — IR → core → IR produces identical IR (idempotency proof)
+- [x] D9: (backfill) Negative validation tests — reject malformed IR (missing fields, invalid enum values like `"system"` for c4_level)
+- [x] D10: (backfill) File-based IR consumption test — test `--from-json-file` (D5) through the DSL
+- [x] D11: (backfill) Double roundtrip stability test — IR → core → IR produces identical IR (idempotency proof)
 
 ### Phase E: Project Template (Deliverable 1.2)
 
@@ -157,12 +155,6 @@ A ──→ B ──→ C ──→ D ──→ E
 - **G** (skills) depends on E (needs the template structure)
 - **H** (pattern validation) depends on B (extends validation infrastructure)
 
-## Key Reference Files
-
-| File | Purpose |
-|------|---------|
-| `AutoDoc-Docs/archive/rationale/proposal.md` | Full methodology, problem solutions, roadmap, ratings |
-| `AutoDoc-Docs/archive/rationale/deliverables.md` | 12 deliverables, packaging, 20 value propositions |
 
 ## Commit Style
 

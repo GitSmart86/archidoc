@@ -555,6 +555,69 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
             .expect("IR schema validation failed");
     }
 
+    fn confirm_ir_rejects(&self, json: &str) {
+        let result = archidoc_engine::ir::validate(json);
+        assert!(
+            result.is_err(),
+            "expected malformed IR to be rejected but it was accepted"
+        );
+    }
+
+    fn write_ir_to_file(&mut self) {
+        let json = self.ir_json().to_string();
+        let path = self.output_dir.path().join("ir_export.json");
+        fs::write(&path, &json).expect("failed to write IR to file");
+    }
+
+    fn compile_from_ir_file(&mut self) {
+        let path = self.output_dir.path().join("ir_export.json");
+        let json = fs::read_to_string(&path)
+            .expect("failed to read IR from file — was write_ir_to_file called?");
+        let docs = archidoc_engine::ir::deserialize(&json)
+            .expect("failed to deserialize IR from file");
+
+        self.results = docs;
+
+        // Regenerate all outputs from deserialized IR
+        let design = self.design_dir();
+        let c4 = self.c4_dir();
+        let drawio = self.drawio_dir();
+
+        if design.exists() { fs::remove_dir_all(&design).ok(); }
+        if c4.exists() { fs::remove_dir_all(&c4).ok(); }
+        if drawio.exists() { fs::remove_dir_all(&drawio).ok(); }
+
+        fs::create_dir_all(&design).expect("failed to create design dir");
+        fs::create_dir_all(&c4).expect("failed to create c4 dir");
+        fs::create_dir_all(&drawio).expect("failed to create drawio dir");
+
+        archidoc_engine::markdown::generate_all(&design, &self.results);
+        archidoc_engine::mermaid::generate_container(&c4, &self.results);
+        archidoc_engine::mermaid::generate_component(&c4, &self.results);
+        archidoc_engine::drawio::generate_container_csv(&drawio, &self.results);
+        archidoc_engine::drawio::generate_component_csv(&drawio, &self.results);
+
+        self.compiled = true;
+    }
+
+    fn confirm_ir_idempotent(&mut self) {
+        // Capture first IR emission
+        let first_ir = self.ir_json().to_string();
+
+        // Compile from that IR
+        let docs = archidoc_engine::ir::deserialize(&first_ir)
+            .expect("failed to deserialize first IR");
+        self.results = docs;
+
+        // Emit IR again
+        let second_ir = archidoc_engine::ir::serialize(&self.results);
+
+        assert_eq!(
+            first_ir, second_ir,
+            "IR is not idempotent — second emission differs from first"
+        );
+    }
+
     // =========================================================================
     // Phase H — Pattern validation
     // =========================================================================

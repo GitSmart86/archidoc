@@ -3,6 +3,7 @@ name = "archidoc-tests"
 version = "0.1.0"
 edition = "2021"
 description = "BDD test infrastructure — DSL, protocol drivers, fakes"
+publish = false
 
 [dependencies]
 archidoc-types = { path = "../archidoc-types" }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/docauto/archidoc-ir-schema.json",
+  "$id": "https://github.com/archidoc/archidoc-ir-schema.json",
   "title": "ModuleDoc[] IR Schema",
   "description": "JSON Intermediate Representation for architecture documentation. This is the contract between any language adapter and the core generator.",
   "type": "array",

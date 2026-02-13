@@ -3,6 +3,10 @@ name = "archidoc-types"
 version = "0.1.0"
 edition = "2021"
 description = "Shared types for the archidoc toolchain"
+license = "MIT"
+repository = "https://github.com/archidoc/archidoc"
+keywords = ["c4-model", "architecture", "documentation", "bdd"]
+categories = ["development-tools", "command-line-utilities"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

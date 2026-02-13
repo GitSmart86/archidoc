@@ -1,3 +1,4 @@
+#![allow(rustdoc::invalid_html_tags)]
 //! # Extract Docs Engine <<container>>
 //!
 //! Language-agnostic generator engine — reads ModuleDoc[], produces documentation and diagrams.

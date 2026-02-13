@@ -28,6 +28,10 @@ fn main() {
                 mode = Mode::FromJsonFile;
             }
             "--validate-ir" => mode = Mode::ValidateIr,
+            "--version" | "-V" => {
+                println!("archidoc {}", env!("CARGO_PKG_VERSION"));
+                return;
+            }
             "--help" | "-h" => {
                 print_usage();
                 return;
@@ -213,6 +217,7 @@ fn print_usage() {
     println!("  --from-json          Read JSON IR from stdin and generate docs");
     println!("  --from-json-file F   Read JSON IR from file F and generate docs");
     println!("  --validate-ir        Validate JSON IR (from stdin or --from-json-file)");
+    println!("  --version, -V        Print version");
     println!("  --help, -h           Print this help message");
     println!();
     println!("If no option is given, generates documentation to docs/generated/.");

@@ -410,6 +410,26 @@ impl ArchitectureDsl {
         self.driver.confirm_ir_schema_valid();
     }
 
+    /// Assert that malformed JSON IR is rejected by the validator.
+    pub fn assert_ir_rejects(&self, malformed_json: &str) {
+        self.driver.confirm_ir_rejects(malformed_json);
+    }
+
+    /// Write the emitted IR to a temporary file on disk.
+    pub fn write_ir_to_file(&mut self) {
+        self.driver.write_ir_to_file();
+    }
+
+    /// Regenerate documentation from an IR file (no source code access).
+    pub fn compile_from_ir_file(&mut self) {
+        self.driver.compile_from_ir_file();
+    }
+
+    /// Assert emitting IR twice (with a compile-from-IR in between) produces identical JSON.
+    pub fn assert_ir_idempotent(&mut self) {
+        self.driver.confirm_ir_idempotent();
+    }
+
     // =========================================================================
     // Phase H — Pattern validation (structural heuristics)
     // =========================================================================

@@ -20,7 +20,19 @@
     "jsdoc",
     "archidoc"
   ],
+  "author": "The Archidoc Contributors",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/archidoc/archidoc"
+  },
+  "homepage": "https://github.com/archidoc/archidoc#readme",
+  "bugs": {
+    "url": "https://github.com/archidoc/archidoc/issues"
+  },
+  "files": [
+    "dist"
+  ],
   "devDependencies": {
     "@types/node": "^25.2.3",
     "typescript": "^5.7.0",

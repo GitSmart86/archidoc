@@ -3,8 +3,12 @@ name = "archidoc-engine"
 version = "0.1.0"
 edition = "2021"
 description = "Language-agnostic generator engine — reads ModuleDoc, produces docs and diagrams"
+license = "MIT"
+repository = "https://github.com/archidoc/archidoc"
+keywords = ["c4-model", "architecture", "documentation", "mermaid", "diagrams"]
+categories = ["development-tools", "command-line-utilities"]
 
 [dependencies]
-archidoc-types = { path = "../archidoc-types" }
+archidoc-types = { version = "0.1.0", path = "../archidoc-types" }
 serde_json = "1"
 tempfile = "3"
