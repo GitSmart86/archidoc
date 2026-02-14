@@ -1,10 +1,10 @@
 [package]
 name = "archidoc-cli"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Architecture documentation compiler — generates C4 diagrams and docs from source code annotations"
 license = "MIT"
-repository = "https://github.com/archidoc/archidoc"
+repository = "https://github.com/GitSmart86/archidoc"
 keywords = ["c4-model", "architecture", "documentation", "cli"]
 categories = ["development-tools", "command-line-utilities"]
 
@@ -13,8 +13,8 @@ name = "archidoc"
 path = "src/main.rs"
 
 [dependencies]
-archidoc-types = { version = "0.1.0", path = "../archidoc-types" }
-archidoc-rust = { version = "0.1.0", path = "../../adapters/archidoc-rust" }
-archidoc-engine = { version = "0.1.0", path = "../archidoc-engine" }
+archidoc-types = { version = "0.2.0", path = "../archidoc-types" }
+archidoc-rust = { version = "0.2.0", path = "../../adapters/archidoc-rust" }
+archidoc-engine = { version = "0.2.0", path = "../archidoc-engine" }
 clap = { version = "4", features = ["derive"] }
 serde_json = "1"
