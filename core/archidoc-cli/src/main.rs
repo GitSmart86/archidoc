@@ -262,7 +262,7 @@ fn run_generate(
     }
 
     // Generate single ARCHITECTURE.md
-    let content = archidoc_engine::architecture::generate(docs);
+    let content = archidoc_engine::architecture::generate(docs, root);
     let output_path = if opts.output.is_absolute() {
         opts.output.clone()
     } else {
@@ -315,7 +315,7 @@ fn run_check(root: &PathBuf, docs: &[archidoc_types::ModuleDoc], output_path: &P
     } else {
         root.join(output_path)
     };
-    let report = archidoc_engine::check::check_drift(docs, &arch_file);
+    let report = archidoc_engine::check::check_drift(docs, &arch_file, root);
 
     if json {
         let json_output = serde_json::to_string_pretty(&report).expect("failed to serialize report");

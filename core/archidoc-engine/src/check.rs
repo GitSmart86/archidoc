@@ -7,8 +7,8 @@ use archidoc_types::{DriftReport, DriftedFile, ModuleDoc};
 ///
 /// Generates the expected content in memory and compares it to the
 /// existing file on disk. Returns a report of differences.
-pub fn check_drift(docs: &[ModuleDoc], architecture_file: &Path) -> DriftReport {
-    let expected = crate::architecture::generate(docs);
+pub fn check_drift(docs: &[ModuleDoc], architecture_file: &Path, root: &Path) -> DriftReport {
+    let expected = crate::architecture::generate(docs, root);
 
     let mut report = DriftReport::default();
 

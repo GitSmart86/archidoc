@@ -64,45 +64,98 @@ pub fn generate_container(output_dir: &Path, docs: &[ModuleDoc]) {
 }
 
 /// Return the Mermaid C4 component diagram as a markdown code block string.
+///
+/// Components are grouped by their nearest container (longest matching prefix),
+/// then arranged as a tree within each container using nested `Container_Boundary`
+/// blocks. Parent-child containment arrows are emitted automatically.
 pub fn component_diagram(docs: &[ModuleDoc]) -> String {
     let components: Vec<&ModuleDoc> = docs
         .iter()
         .filter(|d| d.c4_level == C4Level::Component)
         .collect();
 
-    let mut grouped: BTreeMap<String, Vec<&ModuleDoc>> = BTreeMap::new();
-    for doc in &components {
-        let parent = doc
-            .parent_container
-            .clone()
-            .unwrap_or_else(|| "other".to_string());
-        grouped.entry(parent).or_default().push(doc);
+    let containers: Vec<&ModuleDoc> = docs
+        .iter()
+        .filter(|d| d.c4_level == C4Level::Container)
+        .collect();
+
+    // Group components by their nearest container (longest prefix match).
+    // Falls back to the parent_container field if no container prefix matches.
+    let mut by_container: BTreeMap<String, Vec<&ModuleDoc>> = BTreeMap::new();
+    for comp in &components {
+        let container = containers
+            .iter()
+            .filter(|c| comp.module_path.starts_with(&format!("{}.", c.module_path)))
+            .max_by_key(|c| c.module_path.len())
+            .map(|c| c.module_path.clone())
+            .unwrap_or_else(|| {
+                comp.parent_container
+                    .clone()
+                    .unwrap_or_else(|| "other".to_string())
+            });
+        by_container.entry(container).or_default().push(comp);
     }
 
     let mut boundary_defs = String::new();
-    for (parent, component_docs) in &grouped {
-        let parent_id = parent.replace('.', "_");
-        let parent_name = to_title_case(parent);
+    let mut containment_rels: Vec<(String, String)> = Vec::new();
+
+    for (container_path, comps) in &by_container {
+        let container_id = container_path.replace('.', "_");
+        let container_name = to_title_case(container_path);
+
+        // Build immediate-parent map within this container group.
+        // A component X is the immediate parent of Y if X.module_path is the
+        // longest prefix of Y.module_path among all components in this group.
+        let paths: Vec<&str> = comps.iter().map(|d| d.module_path.as_str()).collect();
+        let mut parent_of: BTreeMap<&str, &str> = BTreeMap::new();
+        let mut children_of: BTreeMap<&str, Vec<&ModuleDoc>> = BTreeMap::new();
+
+        for comp in comps {
+            let parent = paths
+                .iter()
+                .filter(|p| **p != comp.module_path)
+                .filter(|p| comp.module_path.starts_with(&format!("{}.", p)))
+                .max_by_key(|p| p.len());
+            if let Some(p) = parent {
+                parent_of.insert(&comp.module_path, p);
+                children_of
+                    .entry(p)
+                    .or_default()
+                    .push(comp);
+                containment_rels.push((p.to_string(), comp.module_path.clone()));
+            }
+        }
+
+        // Roots are components with no parent within this container group.
+        let roots: Vec<&&ModuleDoc> = comps
+            .iter()
+            .filter(|d| !parent_of.contains_key(d.module_path.as_str()))
+            .collect();
+
         boundary_defs.push_str(&format!(
             "    Container_Boundary({}_boundary, \"{}\") {{\n",
-            parent_id, parent_name
+            container_id, container_name
         ));
-        for doc in component_docs {
-            let id = doc.module_path.replace('.', "_");
-            let name = doc
-                .module_path
-                .split('.')
-                .last()
-                .unwrap_or(&doc.module_path);
-            boundary_defs.push_str(&format!(
-                "        Component({}, \"{}\", \"{}\", \"{}\")\n",
-                id, name, doc.pattern, doc.description
-            ));
+
+        for root in &roots {
+            emit_node(&mut boundary_defs, root, &children_of, 2);
         }
+
         boundary_defs.push_str("    }\n\n");
     }
 
+    // Containment arrows (parent -> child)
     let mut rel_defs = String::new();
+    for (from, to) in &containment_rels {
+        let from_id = from.replace('.', "_");
+        let to_id = to.replace('.', "_");
+        rel_defs.push_str(&format!(
+            "    Rel({}, {}, \"contains\")\n",
+            from_id, to_id
+        ));
+    }
+
+    // User-defined @c4 uses relationships
     for doc in &components {
         let from_id = doc.module_path.replace('.', "_");
         for rel in &doc.relationships {
@@ -118,6 +171,45 @@ pub fn component_diagram(docs: &[ModuleDoc]) -> String {
         "```mermaid\nC4Component\n    title Component Diagram (GoF Patterns)\n\n{}{}```",
         boundary_defs, rel_defs
     )
+}
+
+/// Recursively emit a component node. If the node has children, wrap them
+/// in a nested `Container_Boundary` with the parent component inside.
+fn emit_node(
+    out: &mut String,
+    doc: &ModuleDoc,
+    children_of: &BTreeMap<&str, Vec<&ModuleDoc>>,
+    depth: usize,
+) {
+    let indent = "    ".repeat(depth);
+    let id = doc.module_path.replace('.', "_");
+    let name = doc
+        .module_path
+        .split('.')
+        .last()
+        .unwrap_or(&doc.module_path);
+
+    if let Some(kids) = children_of.get(doc.module_path.as_str()) {
+        // Parent node: emit a sub-boundary containing itself + children
+        out.push_str(&format!(
+            "{}Container_Boundary({}_boundary, \"{}\") {{\n",
+            indent, id, name
+        ));
+        out.push_str(&format!(
+            "{}    Component({}, \"{}\", \"{}\", \"{}\")\n",
+            indent, id, name, doc.pattern, doc.description
+        ));
+        for kid in kids {
+            emit_node(out, kid, children_of, depth + 1);
+        }
+        out.push_str(&format!("{}}}\n", indent));
+    } else {
+        // Leaf node
+        out.push_str(&format!(
+            "{}Component({}, \"{}\", \"{}\", \"{}\")\n",
+            indent, id, name, doc.pattern, doc.description
+        ));
+    }
 }
 
 /// Generate Mermaid C4 component diagram file from `@c4 component` modules.
