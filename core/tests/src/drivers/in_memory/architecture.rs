@@ -63,7 +63,8 @@ impl InMemoryArchitectureDriver {
     }
 
     fn generate_architecture(&mut self) {
-        let content = archidoc_engine::architecture::generate(&self.results);
+        let root = self.source_tree.root().join("src");
+        let content = archidoc_engine::architecture::generate(&self.results, &root);
         fs::write(self.arch_file_path(), &content)
             .expect("failed to write ARCHITECTURE.md");
         self.architecture_content = Some(content);
@@ -403,7 +404,8 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
     fn check_for_drift(&self) -> DriftReport {
         let src_dir = self.source_tree.root().join("src");
         let fresh_docs = archidoc_rust::walker::extract_all_docs(&src_dir);
-        archidoc_engine::check::check_drift(&fresh_docs, &self.arch_file_path())
+        let root = self.source_tree.root().join("src");
+        archidoc_engine::check::check_drift(&fresh_docs, &self.arch_file_path(), &root)
     }
 
     fn confirm_drift_detected(&self) {

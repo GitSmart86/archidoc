@@ -10,5 +10,6 @@ categories = ["development-tools", "command-line-utilities"]
 
 [dependencies]
 archidoc-types = { version = "0.1.0", path = "../archidoc-types" }
+pathdiff = "0.2"
 serde_json = "1"
 tempfile = "3"
