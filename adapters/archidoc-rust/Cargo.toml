@@ -1,6 +1,6 @@
 [package]
 name = "archidoc-rust"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Rust language adapter — parses //! annotations, emits ModuleDoc"
 license = "MIT"
@@ -9,7 +9,7 @@ keywords = ["c4-model", "architecture", "documentation", "rust", "parser"]
 categories = ["development-tools", "command-line-utilities"]
 
 [dependencies]
-archidoc-types = { version = "0.2.0", path = "../../core/archidoc-types" }
+archidoc-types = { version = "0.2.1", path = "../../core/archidoc-types" }
 quote = "1"
 syn = { version = "2", features = ["full", "parsing"] }
 walkdir = "2"
