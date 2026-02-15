@@ -61,6 +61,10 @@ struct GlobalOpts {
     #[arg(long)]
     drawio: bool,
 
+    /// Do not generate ARCHITECTURE.ai.md
+    #[arg(long)]
+    no_ai: bool,
+
     /// Read JSON IR from stdin and generate docs
     #[arg(long, conflicts_with = "from_json_file")]
     from_json: bool,
@@ -91,6 +95,12 @@ enum Commands {
         /// Path to directory to generate annotation for
         path: PathBuf,
     },
+    /// Generate root-level lib.rs/index.ts template with architectural sections
+    Init {
+        /// Language for comment syntax (auto-detected from Cargo.toml/package.json if omitted)
+        #[arg(long)]
+        lang: Option<String>,
+    },
 }
 
 fn main() {
@@ -105,6 +115,10 @@ fn main() {
             }
             Commands::Suggest { path } => {
                 run_suggest(&path);
+                return;
+            }
+            Commands::Init { lang } => {
+                run_init(&cli.path, lang.as_deref());
                 return;
             }
         }
@@ -284,6 +298,23 @@ fn run_generate(
         println!("wrote {}", output_path.display());
     }
 
+    // AI context (default on, --no-ai to skip)
+    if !opts.no_ai {
+        let stem = output_path
+            .file_stem()
+            .unwrap()
+            .to_string_lossy();
+        let ai_path = output_path.with_file_name(format!("{}.ai.md", stem));
+        let ai_content = archidoc_engine::ai_context::generate(docs);
+        fs::write(&ai_path, &ai_content).unwrap_or_else(|e| {
+            eprintln!("error: failed to write {}: {}", ai_path.display(), e);
+            std::process::exit(1);
+        });
+        if verbosity != Verbosity::Quiet {
+            println!("wrote {}", ai_path.display());
+        }
+    }
+
     // Optional sidecar outputs
     if opts.plantuml || opts.drawio {
         let sidecar_dir = output_path.parent().unwrap_or(root);
@@ -408,6 +439,34 @@ fn run_suggest(path: &PathBuf) {
     }
     let annotation = archidoc_engine::suggest::suggest_annotation(path);
     print!("{}", annotation);
+}
+
+fn run_init(path: &Option<PathBuf>, lang: Option<&str>) {
+    use archidoc_engine::init::{CommentStyle, wrap_jsdoc};
+
+    let root = path
+        .clone()
+        .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
+
+    let style = if let Some(lang) = lang {
+        CommentStyle::from_lang(lang).unwrap_or_else(|| {
+            eprintln!("error: unsupported language '{}' (try: rust, ts)", lang);
+            std::process::exit(1);
+        })
+    } else {
+        CommentStyle::detect(&root).unwrap_or_else(|| {
+            eprintln!("error: could not detect language (no Cargo.toml or package.json)");
+            eprintln!("hint: use --lang rust or --lang ts");
+            std::process::exit(1);
+        })
+    };
+
+    let template = archidoc_engine::init::generate_template(style);
+
+    match style {
+        CommentStyle::TypeScript => print!("{}", wrap_jsdoc(&template)),
+        _ => print!("{}", template),
+    }
 }
 
 fn run_init_adapter(lang: &str) {

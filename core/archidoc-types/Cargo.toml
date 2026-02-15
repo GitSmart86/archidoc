@@ -1,10 +1,12 @@
 [package]
 name = "archidoc-types"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 description = "Shared types for the archidoc toolchain"
 license = "MIT"
 repository = "https://github.com/GitSmart86/archidoc"
+homepage = "https://github.com/GitSmart86/archidoc"
+readme = "../../README.md"
 keywords = ["c4-model", "architecture", "documentation", "bdd"]
 categories = ["development-tools", "command-line-utilities"]
 

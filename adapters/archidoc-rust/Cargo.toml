@@ -1,15 +1,17 @@
 [package]
 name = "archidoc-rust"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 description = "Rust language adapter — parses //! annotations, emits ModuleDoc"
 license = "MIT"
 repository = "https://github.com/GitSmart86/archidoc"
+homepage = "https://github.com/GitSmart86/archidoc"
+readme = "../../README.md"
 keywords = ["c4-model", "architecture", "documentation", "rust", "parser"]
 categories = ["development-tools", "command-line-utilities"]
 
 [dependencies]
-archidoc-types = { version = "0.2.1", path = "../../core/archidoc-types" }
+archidoc-types = { version = "0.3.0", path = "../../core/archidoc-types" }
 quote = "1"
 syn = { version = "2", features = ["full", "parsing"] }
 walkdir = "2"

@@ -2,6 +2,45 @@
 
 A structured reference for AI coding assistants to annotate any project with archidoc-compatible C4 architecture documentation.
 
+## ARCHITECTURE.ai.md — Token-Optimized Context
+
+archidoc generates `ARCHITECTURE.ai.md` alongside `ARCHITECTURE.md` by default. This file is designed for LLM consumption:
+
+- **~75% fewer tokens** than the human-readable version
+- Same architectural information — module tree, GoF patterns, descriptions, relationships
+- No Mermaid diagrams, ASCII art, markdown tables, or repeated descriptions
+- Each module appears exactly once in an indented tree format
+
+**Format example:**
+```
+# Architecture (AI Context)
+
+# My Trading App
+
+Day trading backend integrating IBKR and Alpaca brokers.
+
+## Data Flow
+
+1. Frontend -> Router -> Engine -> Brokers
+2. Brokers -> Bus -> Internal Agents -> Frontend
+
+agents_external/ Adapter — Broker adapters for trading APIs.
+  alpaca/ Observer — Alpaca REST+WS adapter.
+  ibkr/ Observer — IBKR TWS/Gateway adapter.
+bus/ Mediator — Central messaging backbone.
+  calc/ Strategy — Candle aggregation and indicators.
+  store/ Repository — Lock-free market data cache.
+engine/ Mediator — Core orchestration layer.
+```
+
+**Usage in CLAUDE.md or similar AI context files:**
+```markdown
+## Architecture Reference
+See `docs/ARCHITECTURE.ai.md` for the full module tree with GoF patterns.
+```
+
+To suppress generation, use `archidoc --no-ai`.
+
 ## What archidoc Expects
 
 archidoc extracts structured documentation from **module entry files** — one per directory. Each entry file contains a documentation block with C4 markers, relationships, and a file table. archidoc compiles these into Mermaid C4 diagrams, markdown docs, and portable JSON IR.
@@ -126,6 +165,31 @@ List every `.rs` or `.ts` file in the directory (excluding `mod.rs`, `lib.rs`, `
 archidoc --validate .    # Check for ghost/orphan files
 archidoc --check .       # Check for documentation drift
 archidoc --health .      # View architecture health summary
+```
+
+## Scaffolding Commands
+
+archidoc provides two scaffolding commands to bootstrap annotations:
+
+### `archidoc init` — Root-level template
+
+Generates a project-level `lib.rs` / `index.ts` doc comment with sections for purpose, C4 context diagram, data flow, concurrency patterns, deployment, and external dependencies. Each section has TODO placeholders.
+
+```bash
+archidoc init              # auto-detects language from Cargo.toml / package.json
+archidoc init --lang rust  # explicit Rust
+archidoc init --lang ts    # explicit TypeScript
+```
+
+The C4 Context mermaid diagram in the template renders in `ARCHITECTURE.md` but is automatically stripped from `ARCHITECTURE.ai.md` (code blocks are excluded from the AI format).
+
+### `archidoc suggest <dir>` — Module-level template
+
+Generates a `@c4 container` or `@c4 component` annotation (auto-detected from directory depth) with a file table listing all source files in the directory.
+
+```bash
+archidoc suggest src/api/                    # prints to stdout
+archidoc suggest src/api/ >> src/api/mod.rs  # append to entry file
 ```
 
 ## Template

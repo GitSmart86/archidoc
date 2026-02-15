@@ -1,15 +1,17 @@
 [package]
 name = "archidoc-engine"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 description = "Language-agnostic generator engine — reads ModuleDoc, produces docs and diagrams"
 license = "MIT"
 repository = "https://github.com/GitSmart86/archidoc"
+homepage = "https://github.com/GitSmart86/archidoc"
+readme = "../../README.md"
 keywords = ["c4-model", "architecture", "documentation", "mermaid", "diagrams"]
 categories = ["development-tools", "command-line-utilities"]
 
 [dependencies]
-archidoc-types = { version = "0.2.1", path = "../archidoc-types" }
+archidoc-types = { version = "0.3.0", path = "../archidoc-types" }
 pathdiff = "0.2"
 serde_json = "1"
 tempfile = "3"

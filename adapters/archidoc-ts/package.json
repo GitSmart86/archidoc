@@ -1,6 +1,6 @@
 {
   "name": "archidoc-ts",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "TypeScript language adapter for archidoc — parses @c4 JSDoc annotations and emits JSON IR",
   "type": "module",
   "main": "dist/index.js",
@@ -24,11 +24,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/archidoc/archidoc"
+    "url": "https://github.com/GitSmart86/archidoc"
   },
-  "homepage": "https://github.com/archidoc/archidoc#readme",
+  "homepage": "https://github.com/GitSmart86/archidoc#readme",
   "bugs": {
-    "url": "https://github.com/archidoc/archidoc/issues"
+    "url": "https://github.com/GitSmart86/archidoc/issues"
   },
   "files": [
     "dist"

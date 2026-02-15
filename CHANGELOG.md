@@ -5,7 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — v0.2.0
+## [0.3.0] - 2026-02-14
+
+### Added
+
+- **AI context output** — `archidoc` now generates `ARCHITECTURE.ai.md` alongside `ARCHITECTURE.md` by default. Token-optimized tree format for LLM consumption (~75% fewer tokens). Strips Mermaid diagrams, ASCII art, and markdown tables. Each module appears once with its GoF pattern and description. Suppress with `--no-ai`.
+- **`archidoc init` subcommand** — scaffolds a root-level `lib.rs` / `index.ts` template with TODO sections for purpose, C4 context diagram, data flow, concurrency patterns, deployment, and external dependencies. Auto-detects language from `Cargo.toml` / `package.json`, or use `--lang rust` / `--lang ts`.
+- CLI: `--no-ai` flag to suppress `ARCHITECTURE.ai.md` generation
+- Engine: `ai_context.rs` — token-optimized AI context generator with orphaned header cleanup and ancestor-aware tree indentation
+- Engine: `init.rs` — root template generator with Rust and TypeScript comment style support
+- Documentation: README rewritten with greenfield and brownfield getting-started paths
+- Documentation: updated LLM guide with ARCHITECTURE.ai.md usage and scaffolding commands
+- Documentation: updated annotating-your-project guide with Step 0 (root scaffolding)
+
+## [0.2.0] - 2026-02-13
 
 ### Changed
 
