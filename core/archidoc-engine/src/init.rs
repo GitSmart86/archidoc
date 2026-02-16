@@ -41,6 +41,39 @@ pub fn generate_template(style: CommentStyle) -> String {
         Section::blank(),
         Section::line("[TODO: One-line description — what this system does and why it exists.]"),
         Section::blank(),
+        // ── Yellow tier: Intent ──────────────────────────────────────
+        Section::heading("Business Context").h2(),
+        Section::blank(),
+        Section::line("- TODO: What problem does this solve? (business need, not technical)"),
+        Section::line("- TODO: Who sponsors this project and what is their primary goal?"),
+        Section::line("- TODO: What existing process does this replace or augment?"),
+        Section::line("- TODO: What is the value proposition? (saves time, reduces risk, unlocks revenue)"),
+        Section::blank(),
+        Section::heading("Domain Model").h2(),
+        Section::blank(),
+        Section::line("- TODO: Key domain concepts and relationships (ubiquitous language)"),
+        Section::line("- TODO: Bounded contexts — where does this system's vocabulary differ from adjacent systems?"),
+        Section::line("- TODO: Domain events — what real-world events does this system respond to?"),
+        Section::blank(),
+        Section::heading("Users & Stakeholders").h2(),
+        Section::blank(),
+        Section::line("- TODO: Primary users — who uses this daily and what are their goals?"),
+        Section::line("- TODO: Secondary stakeholders — who cares about outcomes but doesn't interact directly?"),
+        Section::line("- TODO: What does a typical user workflow look like?"),
+        Section::blank(),
+        Section::heading("Success Criteria").h2(),
+        Section::blank(),
+        Section::line("- TODO: How do you know this project is succeeding? (measurable outcomes)"),
+        Section::line("- TODO: What must be true before this ships? (acceptance criteria)"),
+        Section::line("- TODO: What must this NOT do? (anti-goals, failure modes)"),
+        Section::blank(),
+        Section::heading("Constraints & Trade-offs").h2(),
+        Section::blank(),
+        Section::line("- TODO: Deliberate trade-offs (e.g., maintainability over performance)"),
+        Section::line("- TODO: Non-negotiable constraints (regulatory, timeline, budget, compatibility)"),
+        Section::line("- TODO: What was explicitly ruled out and why?"),
+        Section::blank(),
+        // ── Blue tier: Structure ─────────────────────────────────────
         Section::heading("C4 Context").h2(),
         Section::blank(),
         Section::code_block(
@@ -209,6 +242,13 @@ mod tests {
     fn rust_template_has_all_sections() {
         let out = generate_template(CommentStyle::Rust);
         assert!(out.contains("# [Project Name]"));
+        // Yellow tier — intent
+        assert!(out.contains("## Business Context"));
+        assert!(out.contains("## Domain Model"));
+        assert!(out.contains("## Users & Stakeholders"));
+        assert!(out.contains("## Success Criteria"));
+        assert!(out.contains("## Constraints & Trade-offs"));
+        // Blue tier — structure
         assert!(out.contains("## C4 Context"));
         assert!(out.contains("## Data Flow"));
         assert!(out.contains("## Concurrency & Data Patterns"));

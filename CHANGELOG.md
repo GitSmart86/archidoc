@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-02-16
+
+### Added
+
+- **Intent-tier sections in `archidoc init`** — the scaffolded root template now includes Business Context, Domain Model, Users & Stakeholders, Success Criteria, and Constraints & Trade-offs sections before the C4 structure sections, giving a top-down flow from intent to architecture.
+
+### Changed
+
+- README polish: clearer opening blurb, added "What It Does" summary, fixed markdown formatting for fenced code blocks.
+
 ## [0.3.0] - 2026-02-14
 
 ### Added

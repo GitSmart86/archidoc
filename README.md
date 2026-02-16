@@ -5,9 +5,12 @@
 [![npm](https://img.shields.io/npm/v/archidoc-ts.svg)](https://www.npmjs.com/package/archidoc-ts)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Your architecture diagrams are always wrong because nobody updates them. archidoc fixes this — it extracts C4 architecture documentation directly from source code annotations, so your diagrams stay in sync with your code. If they drift, `archidoc --check` fails your CI build.
+archidoc pulls your architecture — module boundaries, dependency edges, and GoF pattern contracts — straight from comments in your code, turns them into docs and LLM context, and fails your CI build if they fall out of sync.
 
 ## What It Does
+
+Archidoc gives AI and humans high-level intent, mid-level structure, and links to details all in one enforcible file.
+Archidoc pulls your architecture — module boundaries, dependency edges, and GoF pattern contracts — straight from comments in your code, turns them into docs and LLM context, and fails your CI build if they fall out of sync.
 
 Developers annotate module entry files (`mod.rs`, `index.ts`, `__init__.py`) with structured comments containing C4 markers, GoF pattern labels, and file-level responsibility tables. archidoc compiles these annotations into a single **ARCHITECTURE.md** containing:
 
@@ -140,6 +143,7 @@ Each row declares a file in the module with its GoF pattern, purpose, and health
 ### Pattern Confidence
 
 Pattern labels have two tiers:
+
 - **planned** — developer's stated intent
 - **verified** — structurally confirmed by heuristic analysis (Observer, Strategy, Facade)
 
@@ -148,22 +152,27 @@ Pattern labels have two tiers:
 ### Greenfield (new project)
 
 1. **Scaffold the root template** — generates a `lib.rs` / `index.ts` doc comment with TODO sections for purpose, C4 context, data flow, concurrency patterns, deployment, and external dependencies:
+
    ```bash
    archidoc init                   # auto-detects Rust/TS from Cargo.toml or package.json
    archidoc init --lang rust       # explicit
    ```
+
    Paste the output into your root entry file (`lib.rs` or `index.ts`) and fill in the TODOs.
 
 2. **Add module annotations** — as you create modules, scaffold their annotations:
+
    ```bash
    archidoc suggest src/api/       # generates a @c4 container/component template
    archidoc suggest src/api/ >> src/api/mod.rs
    ```
 
 3. **Generate docs**:
+
    ```bash
    archidoc .
    ```
+
    This produces `ARCHITECTURE.md` (human-readable) and `ARCHITECTURE.ai.md` (token-optimized for LLMs).
 
 ### Brownfield (existing project)
@@ -171,11 +180,13 @@ Pattern labels have two tiers:
 1. **Pick your top-level modules** — identify the 3-5 directories that represent your system's major containers (e.g. `api/`, `core/`, `database/`)
 
 2. **Scaffold annotations** for each module:
+
    ```bash
    archidoc suggest src/api/       # prints a ready-to-paste annotation block
    ```
 
 3. **Add a C4 marker** to each module's entry file (`mod.rs`, `index.ts`, or `__init__.py`):
+
    ```rust
    //! @c4 container
    //!
@@ -185,21 +196,25 @@ Pattern labels have two tiers:
    ```
 
 4. **Run archidoc** to generate your first diagrams:
+
    ```bash
    archidoc .
    ```
 
 5. **Optionally scaffold the root** — if you want data flow, concurrency, and deployment sections in your docs:
+
    ```bash
    archidoc init >> src/lib.rs     # append the template, then fill in the TODOs
    ```
 
 6. **Add relationships** between containers:
+
    ```rust
    //! @c4 uses database "Persists user data" "sqlx"
    ```
 
 7. **Gate your CI** to prevent architecture drift:
+
    ```bash
    archidoc --check .
    ```
