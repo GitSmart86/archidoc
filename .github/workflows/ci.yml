@@ -13,6 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build and link archidoc-ts for polyglot tests
+        run: cd adapters/archidoc-ts && npm ci && npm run build && npm link
       - run: cargo test --workspace
       - run: cargo doc --no-deps
 

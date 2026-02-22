@@ -109,21 +109,21 @@ jobs:
           path: artifacts
       - name: Rename binaries for release
         run: |
+          mkdir -p artifacts/release
           for dir in artifacts/archidoc-*/; do
             target=$(basename "$dir")
             if [ -f "$dir/archidoc.exe" ]; then
-              mv "$dir/archidoc.exe" "artifacts/${target}.exe"
+              mv "$dir/archidoc.exe" "artifacts/release/${target}.exe"
             elif [ -f "$dir/archidoc" ]; then
-              mv "$dir/archidoc" "artifacts/${target}"
+              mv "$dir/archidoc" "artifacts/release/${target}"
             fi
-            rmdir "$dir" 2>/dev/null || true
           done
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            artifacts/archidoc-x86_64-unknown-linux-gnu
-            artifacts/archidoc-x86_64-apple-darwin
-            artifacts/archidoc-aarch64-apple-darwin
-            artifacts/archidoc-x86_64-pc-windows-msvc.exe
+            artifacts/release/archidoc-x86_64-unknown-linux-gnu
+            artifacts/release/archidoc-x86_64-apple-darwin
+            artifacts/release/archidoc-aarch64-apple-darwin
+            artifacts/release/archidoc-x86_64-pc-windows-msvc.exe
