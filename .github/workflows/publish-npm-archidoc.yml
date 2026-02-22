@@ -1,0 +1,22 @@
+name: Publish archidoc npm wrapper
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish archidoc to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: adapters/archidoc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm publish --provenance --access public
