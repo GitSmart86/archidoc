@@ -15,8 +15,7 @@ use crate::path_resolver;
 /// Flat module support: A `.rs` file that is not `mod.rs` or `lib.rs` is included
 /// if it contains archidoc annotations (C4 markers: `@c4 container` or `@c4 component`).
 pub fn extract_all_docs(root: &Path) -> Vec<ModuleDoc> {
-    let mut docs = Vec::new();
-    let mut seen_modules = std::collections::HashSet::new();
+    let mut docs_map = std::collections::HashMap::<String, (ModuleDoc, bool)>::new();
 
     for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
@@ -50,10 +49,20 @@ pub fn extract_all_docs(root: &Path) -> Vec<ModuleDoc> {
 
         let module_path = path_resolver::path_to_module_name(path, root, filename);
 
-        // Skip duplicate module paths (e.g., both src/foo/mod.rs and src/foo.rs exist)
-        // mod.rs takes priority
-        if !seen_modules.insert(module_path.clone()) {
-            continue;
+        // When both foo/mod.rs and foo.rs exist, mod.rs takes priority.
+        // Use is_standard_entry as the priority flag — mod.rs/lib.rs always win
+        // over flat modules regardless of WalkDir traversal order.
+        let is_priority = is_standard_entry;
+        if let Some((_, existing_is_priority)) = docs_map.get(&module_path) {
+            if *existing_is_priority && !is_priority {
+                // Existing entry is mod.rs/lib.rs, skip this flat module
+                continue;
+            }
+            if !*existing_is_priority && !is_priority {
+                // Both are flat modules with same path — keep first
+                continue;
+            }
+            // Otherwise this is a priority entry replacing a flat module — fall through
         }
 
         let c4_level = parser::extract_c4_level(&content);
@@ -64,7 +73,7 @@ pub fn extract_all_docs(root: &Path) -> Vec<ModuleDoc> {
         let relationships = parser::extract_relationships(&content);
         let files = parser::extract_file_table(&content);
 
-        docs.push(ModuleDoc {
+        docs_map.insert(module_path.clone(), (ModuleDoc {
             module_path,
             content,
             source_file: path.to_string_lossy().to_string(),
@@ -75,9 +84,10 @@ pub fn extract_all_docs(root: &Path) -> Vec<ModuleDoc> {
             parent_container,
             relationships,
             files,
-        });
+        }, is_priority));
     }
 
+    let mut docs: Vec<ModuleDoc> = docs_map.into_values().map(|(doc, _)| doc).collect();
     docs.sort_by(|a, b| a.module_path.cmp(&b.module_path));
     docs
 }
