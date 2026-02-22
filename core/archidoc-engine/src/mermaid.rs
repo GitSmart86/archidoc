@@ -96,7 +96,8 @@ pub fn container_diagram(docs: &[ModuleDoc]) -> String {
     }
 
     let name_map = build_name_map(docs);
-    let declared_paths: HashSet<String> = docs.iter().map(|d| d.module_path.clone()).collect();
+    // Only container-level modules are rendered as nodes in this diagram.
+    let declared_paths: HashSet<String> = containers.iter().map(|d| d.module_path.clone()).collect();
 
     let mut rel_defs = String::new();
     let mut seen_rels: HashSet<String> = HashSet::new();
@@ -239,7 +240,13 @@ pub fn component_diagram(docs: &[ModuleDoc]) -> String {
 
     // User-defined @c4 uses relationships
     let name_map = build_name_map(docs);
-    let declared_paths: HashSet<String> = docs.iter().map(|d| d.module_path.clone()).collect();
+    // Components can reference both components (in this diagram) and containers
+    // (declared in the container diagram). Include both levels as valid targets.
+    let declared_paths: HashSet<String> = docs
+        .iter()
+        .filter(|d| d.c4_level == C4Level::Container || d.c4_level == C4Level::Component)
+        .map(|d| d.module_path.clone())
+        .collect();
     let mut seen_rels: HashSet<String> = HashSet::new();
     for doc in &components {
         let from_id = doc.module_path.replace('.', "_");

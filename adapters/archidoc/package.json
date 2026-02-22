@@ -1,6 +1,6 @@
 {
   "name": "archidoc",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Architecture documentation compiler — C4 diagrams from source annotations. Downloads the native archidoc binary and includes the TypeScript adapter.",
   "bin": {
     "archidoc": "bin/archidoc.js"
@@ -9,7 +9,7 @@
     "postinstall": "node scripts/install.js"
   },
   "dependencies": {
-    "archidoc-ts": "^0.3.3"
+    "archidoc-ts": "^0.3.4"
   },
   "files": [
     "bin/",

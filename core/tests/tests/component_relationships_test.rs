@@ -213,10 +213,44 @@ fn dependency_with_qualified_path_works_in_diagram() {
 }
 
 #[test]
-fn ambiguous_short_name_falls_back_to_literal_in_diagram() {
-    // When two modules share the same short name (e.g., "types" appears in
-    // both "app.frontend.types" and "app.backend.types"), the short name is
-    // ambiguous and the target should be used literally (not resolved).
+fn ambiguous_short_name_falls_back_to_qualified_path_in_container_diagram() {
+    // When two containers share the same short name (e.g., "store" appears in
+    // both "app.frontend.store" and "app.backend.store"), the short name is
+    // ambiguous. The qualified path must be used and resolved correctly.
+    let mut arch = ArchitectureDsl::setup();
+
+    arch.annotate_container(&[
+        "name: app.frontend",
+        "purpose: User-facing views",
+    ]);
+    arch.annotate_container(&[
+        "name: app.frontend.store",
+        "purpose: Frontend state store",
+    ]);
+    arch.annotate_container(&[
+        "name: app.backend.store",
+        "purpose: Backend data store",
+    ]);
+    // Use the qualified path since "store" is ambiguous
+    arch.declare_dependency(&[
+        "from: app.frontend",
+        "to: app.backend.store",
+        "label: Shared data",
+        "protocol: IPC",
+    ]);
+    arch.compile();
+
+    arch.assert_diagram_shows_dependency(&[
+        "from: app.frontend",
+        "to: app.backend.store",
+    ]);
+}
+
+#[test]
+fn container_dependency_targeting_component_collapses_to_parent_container() {
+    // When a container-level dependency targets a component, the container
+    // diagram should collapse it to the nearest parent container (since
+    // components aren't rendered as nodes in the container diagram).
     let mut arch = ArchitectureDsl::setup();
 
     arch.annotate_container(&[
@@ -228,14 +262,9 @@ fn ambiguous_short_name_falls_back_to_literal_in_diagram() {
         "purpose: Backend services",
     ]);
     arch.annotate_component(&[
-        "name: app.frontend.types",
-        "purpose: Frontend domain types",
-    ]);
-    arch.annotate_component(&[
         "name: app.backend.types",
         "purpose: Backend domain types",
     ]);
-    // Use the qualified path since "types" is ambiguous
     arch.declare_dependency(&[
         "from: app.frontend",
         "to: app.backend.types",
@@ -244,9 +273,10 @@ fn ambiguous_short_name_falls_back_to_literal_in_diagram() {
     ]);
     arch.compile();
 
+    // In the container diagram, app.backend.types collapses to app.backend
     arch.assert_diagram_shows_dependency(&[
         "from: app.frontend",
-        "to: app.backend.types",
+        "to: app.backend",
     ]);
 }
 
