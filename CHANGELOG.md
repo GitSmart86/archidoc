@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-02-21
+
+### Added
+
+- **Polyglot auto-detection** — `archidoc .` now auto-detects TypeScript projects (via `package.json`), shells out to `archidoc-ts`, and merges IR from both Rust and TypeScript adapters. All downstream modes (`--check`, `--health`, `--validate`, `--emit-ir`) use the unified polyglot result. Graceful degradation when `archidoc-ts` is not installed.
+- **npm binary wrapper** (`archidoc` on npm) — `npm install archidoc` downloads the prebuilt native binary from GitHub Releases and includes `archidoc-ts` as a dependency. One install for full polyglot support, no Rust toolchain needed.
+- **GitHub Release binary naming fix** — release assets are now named with target triples (`archidoc-x86_64-unknown-linux-gnu`, etc.) to avoid name conflicts across platforms.
+- **CLI polyglot integration tests** — 6 new tests covering Rust-only, TS-only, and polyglot project detection.
+- **npm wrapper tests** — 21 tests for platform detection, URL construction, and package structure.
+
 ## [0.3.1] - 2026-02-16
 
 ### Added

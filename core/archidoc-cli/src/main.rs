@@ -219,7 +219,7 @@ fn main() {
                 std::process::exit(1);
             }
 
-            let docs = archidoc_rust::walker::extract_all_docs(&root);
+            let docs = collect_all_docs(&root, verbosity);
 
             match mode {
                 Mode::Generate => run_generate(&root, &docs, &cli.global, verbosity),
@@ -466,6 +466,94 @@ fn run_init(path: &Option<PathBuf>, lang: Option<&str>) {
     match style {
         CommentStyle::TypeScript => print!("{}", wrap_jsdoc(&template)),
         _ => print!("{}", template),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Polyglot adapter detection — auto-detect and merge language adapters
+// ---------------------------------------------------------------------------
+
+/// Collect ModuleDoc from all detected language adapters.
+///
+/// 1. Always runs the built-in Rust adapter
+/// 2. Auto-detects TypeScript (package.json + archidoc-ts available) and shells out
+/// 3. Merges results if both produce output
+fn collect_all_docs(root: &std::path::Path, verbosity: Verbosity) -> Vec<archidoc_types::ModuleDoc> {
+    let rust_docs = archidoc_rust::walker::extract_all_docs(root);
+    let ts_docs = detect_and_run_ts_adapter(root, verbosity);
+
+    if !rust_docs.is_empty() && !ts_docs.is_empty() {
+        match archidoc_engine::merge::merge_ir(vec![rust_docs, ts_docs]) {
+            Ok(merged) => merged,
+            Err(e) => {
+                eprintln!("warning: IR merge failed ({}), using Rust-only docs", e);
+                archidoc_rust::walker::extract_all_docs(root)
+            }
+        }
+    } else if !ts_docs.is_empty() {
+        ts_docs
+    } else {
+        rust_docs
+    }
+}
+
+/// Detect and run the archidoc-ts adapter if the project has TypeScript sources.
+///
+/// Returns an empty Vec if:
+/// - No package.json in root
+/// - archidoc-ts is not installed (npx would fail)
+/// - The subprocess fails or returns invalid JSON
+fn detect_and_run_ts_adapter(root: &std::path::Path, verbosity: Verbosity) -> Vec<archidoc_types::ModuleDoc> {
+    if !root.join("package.json").exists() {
+        return vec![];
+    }
+
+    // On Windows, .cmd/.bat scripts aren't directly executable by Command::new.
+    // Use cmd /c to resolve npx.cmd from PATH.
+    let output = if cfg!(windows) {
+        std::process::Command::new("cmd")
+            .args(["/c", "npx", "archidoc-ts", &root.to_string_lossy()])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .output()
+    } else {
+        std::process::Command::new("npx")
+            .args(["archidoc-ts", &root.to_string_lossy()])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .output()
+    };
+
+    match output {
+        Ok(result) if result.status.success() => {
+            let json = String::from_utf8_lossy(&result.stdout);
+            match archidoc_engine::ir::deserialize(&json) {
+                Ok(docs) if !docs.is_empty() => {
+                    if verbosity == Verbosity::Verbose {
+                        eprintln!("  typescript adapter: {} modules", docs.len());
+                    }
+                    docs
+                }
+                Ok(_) => vec![],
+                Err(e) => {
+                    eprintln!("warning: archidoc-ts output could not be parsed: {}", e);
+                    vec![]
+                }
+            }
+        }
+        Ok(result) => {
+            if verbosity == Verbosity::Verbose {
+                let stderr = String::from_utf8_lossy(&result.stderr);
+                eprintln!("  typescript adapter not available: {}", stderr.trim());
+            }
+            vec![]
+        }
+        Err(_) => {
+            if verbosity == Verbosity::Verbose {
+                eprintln!("  typescript adapter skipped (npx not found)");
+            }
+            vec![]
+        }
     }
 }
 

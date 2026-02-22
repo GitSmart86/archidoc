@@ -1,0 +1,4 @@
+# Downloaded native binary (created by postinstall)
+bin/archidoc
+bin/archidoc.exe
+node_modules/
