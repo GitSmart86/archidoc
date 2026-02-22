@@ -1,6 +1,6 @@
 {
   "name": "archidoc-ts",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "TypeScript language adapter for archidoc — parses @c4 JSDoc annotations and emits JSON IR",
   "type": "module",
   "main": "dist/index.js",

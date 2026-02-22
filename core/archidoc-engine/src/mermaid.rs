@@ -1,8 +1,82 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::Path;
 
 use archidoc_types::{C4Level, ModuleDoc};
+
+/// Build a lookup map from short names and full paths to canonical module paths.
+///
+/// Every module's full path maps to itself. Additionally, the last segment of
+/// each path (the "short name") maps to the full path — unless two modules
+/// share the same short name, in which case the ambiguous entry is removed
+/// and callers must use a qualified path.
+fn build_name_map(docs: &[ModuleDoc]) -> BTreeMap<String, String> {
+    let mut map = BTreeMap::new();
+    let mut ambiguous: HashSet<String> = HashSet::new();
+
+    for doc in docs {
+        // Full path always maps to itself.
+        map.insert(doc.module_path.clone(), doc.module_path.clone());
+
+        // Short name (last segment) maps to full path.
+        let short_name = doc
+            .module_path
+            .split('.')
+            .last()
+            .unwrap_or(&doc.module_path)
+            .to_string();
+        if short_name != doc.module_path {
+            if let Some(existing) = map.get(&short_name) {
+                if *existing != doc.module_path {
+                    ambiguous.insert(short_name.clone());
+                }
+            } else {
+                map.insert(short_name, doc.module_path.clone());
+            }
+        }
+    }
+
+    // Remove ambiguous short-name entries.
+    for name in &ambiguous {
+        map.remove(name);
+    }
+
+    map
+}
+
+/// Resolve a relationship target to a Mermaid node ID.
+///
+/// 1. Looks up the target in the name map (handles both short names like
+///    "session_store" and qualified paths like "app.backend.session_store").
+/// 2. Validates the resolved path against declared nodes. If it matches, returns
+///    the Mermaid node ID directly.
+/// 3. If unresolved, finds the longest declared-node prefix (collapses to nearest
+///    parent). This handles auto-discovered imports to sub-files that aren't
+///    themselves declared components (e.g. "tests.drivers.stubs.stubFoo" collapses
+///    to "tests.drivers").
+/// 4. Returns `None` if no declared node matches at all — the Rel should be skipped.
+fn resolve_rel_target(
+    target: &str,
+    name_map: &BTreeMap<String, String>,
+    declared_paths: &HashSet<String>,
+) -> Option<String> {
+    let resolved = name_map
+        .get(target)
+        .cloned()
+        .unwrap_or_else(|| target.to_string());
+
+    // Direct match against a declared node.
+    if declared_paths.contains(&resolved) {
+        return Some(resolved.replace('.', "_"));
+    }
+
+    // Collapse to the longest declared-node prefix.
+    declared_paths
+        .iter()
+        .filter(|p| resolved.starts_with(&format!("{}.", p)))
+        .max_by_key(|p| p.len())
+        .map(|p| p.replace('.', "_"))
+}
 
 /// Return the Mermaid C4 container diagram as a markdown code block string.
 pub fn container_diagram(docs: &[ModuleDoc]) -> String {
@@ -21,15 +95,23 @@ pub fn container_diagram(docs: &[ModuleDoc]) -> String {
         ));
     }
 
+    let name_map = build_name_map(docs);
+    let declared_paths: HashSet<String> = docs.iter().map(|d| d.module_path.clone()).collect();
+
     let mut rel_defs = String::new();
+    let mut seen_rels: HashSet<String> = HashSet::new();
     for doc in &containers {
         let from_id = doc.module_path.replace('.', "_");
         for rel in &doc.relationships {
-            let to_id = rel.target.replace('.', "_");
-            rel_defs.push_str(&format!(
-                "    Rel({}, {}, \"{}\", \"{}\")\n",
-                from_id, to_id, rel.label, rel.protocol
-            ));
+            if let Some(to_id) = resolve_rel_target(&rel.target, &name_map, &declared_paths) {
+                let rel_key = format!("{}|{}|{}", from_id, to_id, rel.label);
+                if seen_rels.insert(rel_key) {
+                    rel_defs.push_str(&format!(
+                        "    Rel({}, {}, \"{}\", \"{}\")\n",
+                        from_id, to_id, rel.label, rel.protocol
+                    ));
+                }
+            }
         }
     }
 
@@ -156,14 +238,21 @@ pub fn component_diagram(docs: &[ModuleDoc]) -> String {
     }
 
     // User-defined @c4 uses relationships
+    let name_map = build_name_map(docs);
+    let declared_paths: HashSet<String> = docs.iter().map(|d| d.module_path.clone()).collect();
+    let mut seen_rels: HashSet<String> = HashSet::new();
     for doc in &components {
         let from_id = doc.module_path.replace('.', "_");
         for rel in &doc.relationships {
-            let to_id = rel.target.replace('.', "_");
-            rel_defs.push_str(&format!(
-                "    Rel({}, {}, \"{}\", \"{}\")\n",
-                from_id, to_id, rel.label, rel.protocol
-            ));
+            if let Some(to_id) = resolve_rel_target(&rel.target, &name_map, &declared_paths) {
+                let rel_key = format!("{}|{}|{}", from_id, to_id, rel.label);
+                if seen_rels.insert(rel_key) {
+                    rel_defs.push_str(&format!(
+                        "    Rel({}, {}, \"{}\", \"{}\")\n",
+                        from_id, to_id, rel.label, rel.protocol
+                    ));
+                }
+            }
         }
     }
 
