@@ -52,10 +52,35 @@ pub fn extract_c4_level(content: &str) -> C4Level {
 
 /// Extract the primary GoF pattern name from doc content.
 ///
-/// Looks for known pattern names in the content. Returns the first match
-/// or "--" if none found.
+/// Priority order:
+/// 1. Explicit `Pattern:` line in the annotation (structured, reliable)
+/// 2. Substring search for known pattern names in content (heuristic fallback)
+/// 3. "--" if nothing found
 pub fn extract_pattern(content: &str) -> String {
+    // Priority 1: explicit "Pattern:" annotation line
+    if let Some(pattern) = extract_explicit_pattern(content) {
+        return pattern;
+    }
+
+    // Priority 2: heuristic substring search on description lines only
+    // (excludes file table rows and @c4 markers to avoid false positives)
+    // Order matters — longer/more specific patterns first to avoid
+    // partial matches (e.g. "Chain of Responsibility" before "Command")
+    let description_text: String = content
+        .lines()
+        .filter(|l| {
+            let t = l.trim();
+            !t.starts_with('|') && !t.starts_with("@c4 ") && !t.starts_with("Pattern:")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
     let patterns = [
+        "Chain of Responsibility",
+        "Active Object",
+        "Template Method",
+        "Abstract Factory",
+        "Value Object",
         "Mediator",
         "Observer",
         "Strategy",
@@ -66,19 +91,23 @@ pub fn extract_pattern(content: &str) -> String {
         "Factory",
         "Builder",
         "Decorator",
-        "Active Object",
         "Memento",
         "Command",
-        "Chain of Responsibility",
-        "Registry",
+        "Iterator",
         "Composite",
         "Interpreter",
         "Flyweight",
         "Publisher",
+        "Prototype",
+        "Bridge",
+        "Proxy",
+        "State",
+        "Visitor",
+        "Core",
     ];
 
     for name in patterns {
-        if content.contains(name) {
+        if description_text.contains(name) {
             return name.to_string();
         }
     }
@@ -86,10 +115,52 @@ pub fn extract_pattern(content: &str) -> String {
     "--".to_string()
 }
 
+/// Extract an explicit "Pattern: X" or "Pattern: X (verified)" line from doc content.
+///
+/// Looks for a line starting with "Pattern:" and extracts the pattern name.
+/// Handles optional status suffix like "(verified)" or "(planned)".
+fn extract_explicit_pattern(content: &str) -> Option<String> {
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("Pattern:") {
+            let rest = rest.trim();
+            if rest.is_empty() || rest == "--" {
+                continue;
+            }
+            // Strip optional status suffix: "Facade (verified)" -> "Facade"
+            let pattern = if let Some(idx) = rest.find('(') {
+                rest[..idx].trim()
+            } else {
+                rest
+            };
+            if !pattern.is_empty() {
+                return Some(pattern.to_string());
+            }
+        }
+    }
+    None
+}
+
 /// Extract pattern status from doc content.
 ///
-/// Looks for "(verified)" near a pattern name. Defaults to Planned.
+/// Checks for status on the explicit `Pattern:` line first (e.g. "Pattern: Facade (verified)"),
+/// then falls back to searching for "(verified)" anywhere in content. Defaults to Planned.
 pub fn extract_pattern_status(content: &str) -> PatternStatus {
+    // Priority 1: status on the "Pattern:" line
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("Pattern:") {
+            let rest = rest.trim();
+            if let Some(idx) = rest.find('(') {
+                let status_str = rest[idx + 1..]
+                    .trim_end_matches(')')
+                    .trim();
+                return PatternStatus::parse(status_str);
+            }
+        }
+    }
+
+    // Priority 2: "(verified)" anywhere in content (legacy fallback)
     if content.contains("(verified)") {
         PatternStatus::Verified
     } else {
@@ -108,6 +179,7 @@ pub fn extract_description(content: &str) -> String {
                 && !trimmed.starts_with("@c4 ")
                 && !trimmed.starts_with('|')
                 && !trimmed.starts_with("GoF:")
+                && !trimmed.starts_with("Pattern:")
         })
         .unwrap_or("*No description*")
         .trim()
@@ -211,6 +283,76 @@ fn parse_pattern_field(field: &str) -> (String, PatternStatus) {
         (pattern, PatternStatus::parse(status_str))
     } else {
         (trimmed.to_string(), PatternStatus::Planned)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn explicit_pattern_single_word() {
+        let content = "@c4 component\n\nSome description.\n\nPattern: Facade";
+        assert_eq!(extract_pattern(content), "Facade");
+    }
+
+    #[test]
+    fn explicit_pattern_multi_word() {
+        let content = "@c4 component\n\nSome description.\n\nPattern: Value Object";
+        assert_eq!(extract_pattern(content), "Value Object");
+    }
+
+    #[test]
+    fn explicit_pattern_chain_of_responsibility() {
+        let content = "@c4 component\n\nValidation pipeline.\n\nPattern: Chain of Responsibility";
+        assert_eq!(extract_pattern(content), "Chain of Responsibility");
+    }
+
+    #[test]
+    fn explicit_pattern_with_verified_status() {
+        let content = "@c4 component\n\nEntry point.\n\nPattern: Strategy (verified)";
+        assert_eq!(extract_pattern(content), "Strategy");
+        assert_eq!(extract_pattern_status(content), PatternStatus::Verified);
+    }
+
+    #[test]
+    fn explicit_pattern_overrides_heuristic() {
+        // Description contains "Factory" but Pattern line says "Builder"
+        let content = "@c4 component\n\nFactory for creating widgets.\n\nPattern: Builder";
+        assert_eq!(extract_pattern(content), "Builder");
+    }
+
+    #[test]
+    fn heuristic_fallback_when_no_pattern_line() {
+        let content = "@c4 container\n\nCentral Facade for the module.";
+        assert_eq!(extract_pattern(content), "Facade");
+    }
+
+    #[test]
+    fn heuristic_ignores_file_table_patterns() {
+        // File table contains "Value Object" but description doesn't mention a pattern
+        let content = "@c4 container\n\nShared domain types.\n\n| File | Pattern | Purpose | Health |\n|------|---------|---------|--------|\n| `types.rs` | Value Object | Domain types | stable |";
+        assert_eq!(extract_pattern(content), "--");
+    }
+
+    #[test]
+    fn no_false_positive_from_registry_in_description() {
+        // "RegistryEntry" in description should not match "Registry"
+        // (Registry was removed from the heuristic pattern list)
+        let content = "@c4 component\n\nPattern: Value Object\n\nDomain types: RegistryEntry, Primitive.";
+        assert_eq!(extract_pattern(content), "Value Object");
+    }
+
+    #[test]
+    fn description_skips_pattern_line() {
+        let content = "@c4 component\n\nPattern: Facade\n\nActual description here.";
+        assert_eq!(extract_description(content), "Actual description here.");
+    }
+
+    #[test]
+    fn pattern_dash_dash_is_skipped() {
+        let content = "@c4 component\n\nSome description.\n\nPattern: --";
+        assert_eq!(extract_pattern(content), "--");
     }
 }
 
