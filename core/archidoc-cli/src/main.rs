@@ -22,7 +22,7 @@ struct Cli {
 #[derive(Args)]
 struct GlobalOpts {
     /// Output path for generated ARCHITECTURE.md
-    #[arg(short, long, default_value = "ARCHITECTURE.md")]
+    #[arg(short, long, default_value = "_context/ARCHITECTURE.md")]
     output: PathBuf,
 
     /// Suppress informational output (only errors and requested output)
