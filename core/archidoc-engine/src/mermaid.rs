@@ -180,7 +180,6 @@ pub fn component_diagram(docs: &[ModuleDoc]) -> String {
     }
 
     let mut boundary_defs = String::new();
-    let mut containment_rels: Vec<(String, String)> = Vec::new();
 
     for (container_path, comps) in &by_container {
         let container_id = to_mermaid_id(container_path);
@@ -205,7 +204,6 @@ pub fn component_diagram(docs: &[ModuleDoc]) -> String {
                     .entry(p)
                     .or_default()
                     .push(comp);
-                containment_rels.push((p.to_string(), comp.module_path.clone()));
             }
         }
 
@@ -227,18 +225,8 @@ pub fn component_diagram(docs: &[ModuleDoc]) -> String {
         boundary_defs.push_str("    }\n\n");
     }
 
-    // Containment arrows (parent -> child)
-    let mut rel_defs = String::new();
-    for (from, to) in &containment_rels {
-        let from_id = to_mermaid_id(from);
-        let to_id = to_mermaid_id(to);
-        rel_defs.push_str(&format!(
-            "    Rel({}, {}, \"contains\")\n",
-            from_id, to_id
-        ));
-    }
-
     // User-defined @c4 uses relationships
+    let mut rel_defs = String::new();
     let name_map = build_name_map(docs);
     // Components can reference both components (in this diagram) and containers
     // (declared in the container diagram). Include both levels as valid targets.
@@ -269,12 +257,16 @@ pub fn component_diagram(docs: &[ModuleDoc]) -> String {
     )
 }
 
-/// Recursively emit a component node. If the node has children, wrap them
-/// in a nested `Container_Boundary` with the parent component inside.
+/// Emit a component node as a flat `Component()` entry.
+///
+/// Nested `Container_Boundary` blocks are intentionally avoided — Mermaid's
+/// layout engine (Dagre) crashes with "Cannot read properties of undefined
+/// (reading 'x')" when boundaries are nested more than ~2 levels deep.
+/// Hierarchy is preserved in the module_path dot notation and Component Index.
 fn emit_node(
     out: &mut String,
     doc: &ModuleDoc,
-    children_of: &BTreeMap<&str, Vec<&ModuleDoc>>,
+    _children_of: &BTreeMap<&str, Vec<&ModuleDoc>>,
     depth: usize,
 ) {
     let indent = "    ".repeat(depth);
@@ -285,27 +277,10 @@ fn emit_node(
         .last()
         .unwrap_or(&doc.module_path);
 
-    if let Some(kids) = children_of.get(doc.module_path.as_str()) {
-        // Parent node: emit a sub-boundary containing itself + children
-        out.push_str(&format!(
-            "{}Container_Boundary({}_boundary, \"{}\") {{\n",
-            indent, id, name
-        ));
-        out.push_str(&format!(
-            "{}    Component({}, \"{}\", \"{}\", \"{}\")\n",
-            indent, id, name, doc.pattern, doc.description
-        ));
-        for kid in kids {
-            emit_node(out, kid, children_of, depth + 1);
-        }
-        out.push_str(&format!("{}}}\n", indent));
-    } else {
-        // Leaf node
-        out.push_str(&format!(
-            "{}Component({}, \"{}\", \"{}\", \"{}\")\n",
-            indent, id, name, doc.pattern, doc.description
-        ));
-    }
+    out.push_str(&format!(
+        "{}Component({}, \"{}\", \"{}\", \"{}\")\n",
+        indent, id, name, doc.pattern, doc.description
+    ));
 }
 
 /// Generate Mermaid C4 component diagram file from `@c4 component` modules.
