@@ -18,6 +18,7 @@
 //! | `init.rs` | -- | Root-level project template generator | active |
 //! | `suggest.rs` | -- | Annotation scaffolding templates | active |
 //! | `scaffold.rs` | -- | Audit and stub generation for missing _index.md files | active |
+//! | `tree.rs` | -- | Token-optimized directory tree generation | active |
 //! | `merge.rs` | -- | Polyglot IR merging | active |
 //! | `custom.rs` | -- | Template loading and token substitution | stable |
 
@@ -34,4 +35,5 @@ pub mod mermaid;
 pub mod plantuml;
 pub mod scaffold;
 pub mod suggest;
+pub mod tree;
 pub mod validate;
