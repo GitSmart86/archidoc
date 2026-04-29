@@ -101,6 +101,12 @@ enum Commands {
         #[arg(long)]
         lang: Option<String>,
     },
+    /// Scaffold .archidoc/custom/ with editable default templates
+    ///
+    /// Creates .archidoc/custom/{mod.rs,index.ts,_index.md,architecture-table.md}
+    /// so you can customize suggest and summary table output.
+    /// Existing files are never overwritten. Delete a file to revert to the built-in default.
+    Templates,
 }
 
 fn main() {
@@ -119,6 +125,10 @@ fn main() {
             }
             Commands::Init { lang } => {
                 run_init(&cli.path, lang.as_deref());
+                return;
+            }
+            Commands::Templates => {
+                run_templates(&cli.path);
                 return;
             }
         }
@@ -455,9 +465,6 @@ fn run_suggest(path: &PathBuf) {
 
 fn run_init(path: &Option<PathBuf>, lang: Option<&str>) {
     use archidoc_engine::init::{CommentStyle, wrap_jsdoc};
-    use archidoc_engine::custom::{
-        DEFAULT_SUGGEST_RUST, DEFAULT_SUGGEST_TS, DEFAULT_SUGGEST_MD, DEFAULT_ARCHITECTURE_TABLE,
-    };
 
     let root = path
         .clone()
@@ -482,9 +489,17 @@ fn run_init(path: &Option<PathBuf>, lang: Option<&str>) {
         CommentStyle::TypeScript => print!("{}", wrap_jsdoc(&template)),
         _ => print!("{}", template),
     }
+}
 
-    // Scaffold .archidoc/custom/ with parameterized default templates.
-    // Existing files are never overwritten — user customizations are preserved.
+fn run_templates(path: &Option<PathBuf>) {
+    use archidoc_engine::custom::{
+        DEFAULT_ARCHITECTURE_TABLE, DEFAULT_SUGGEST_MD, DEFAULT_SUGGEST_RUST, DEFAULT_SUGGEST_TS,
+    };
+
+    let root = path
+        .clone()
+        .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
+
     let custom_dir = root.join(".archidoc").join("custom");
     fs::create_dir_all(&custom_dir).expect("failed to create .archidoc/custom/");
 
@@ -496,9 +511,12 @@ fn run_init(path: &Option<PathBuf>, lang: Option<&str>) {
     ];
 
     let mut created = Vec::new();
+    let mut skipped = Vec::new();
     for (filename, content) in scaffolds {
         let dest = custom_dir.join(filename);
-        if !dest.exists() {
+        if dest.exists() {
+            skipped.push(filename.to_string());
+        } else {
             fs::write(&dest, content).unwrap_or_else(|e| {
                 eprintln!("warning: failed to write {}: {}", dest.display(), e);
             });
@@ -507,13 +525,20 @@ fn run_init(path: &Option<PathBuf>, lang: Option<&str>) {
     }
 
     if !created.is_empty() {
-        eprintln!("\nscaffolded .archidoc/custom/:");
+        println!("created .archidoc/custom/:");
         for name in &created {
-            eprintln!("  {}", name);
+            println!("  {}", name);
         }
-        eprintln!("edit these files to override suggest and summary table output.");
-        eprintln!("delete them to revert to built-in defaults.");
     }
+    if !skipped.is_empty() {
+        println!("skipped (already exist):");
+        for name in &skipped {
+            println!("  {}", name);
+        }
+    }
+    println!();
+    println!("edit these files to override suggest and summary table output.");
+    println!("delete a file to revert that template to the built-in default.");
 }
 
 // ---------------------------------------------------------------------------
