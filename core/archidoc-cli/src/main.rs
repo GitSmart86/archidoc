@@ -279,6 +279,16 @@ fn run_generate(
     verbosity: Verbosity,
     columns: &[String],
 ) {
+    // Make root absolute without canonicalize — canonicalize produces UNC paths
+    // on Windows (\\?\C:\...) which pathdiff cannot diff against regular paths
+    // (C:\...) emitted by Node's path.resolve(). Just join with CWD instead.
+    let root = &if root.is_absolute() {
+        root.clone()
+    } else {
+        std::env::current_dir()
+            .expect("failed to get current directory")
+            .join(root)
+    };
     if verbosity != Verbosity::Quiet {
         println!("archidoc: {} modules", docs.len());
     }

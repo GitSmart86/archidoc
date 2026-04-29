@@ -36,6 +36,7 @@ const SKIP_DIRS = new Set([
  */
 export function extractAllDocs(root: string): ModuleDoc[] {
   const docs: ModuleDoc[] = [];
+  root = path.resolve(root);
 
   walkDir(root, (filePath) => {
     if (path.basename(filePath) !== "_index.md") return;
