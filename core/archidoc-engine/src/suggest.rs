@@ -1,14 +1,40 @@
 use std::path::Path;
 use std::fs;
 
+use crate::custom::CustomTemplates;
+
 /// Generate an annotation template for the given directory.
-/// Scans for source files, infers C4 level from directory depth, and produces
-/// a ready-to-paste annotation block with TODO placeholders.
-pub fn suggest_annotation(dir: &Path) -> String {
+///
+/// If `template` is `Some`, uses it as the template with `{{token}}` substitution.
+/// If `None`, falls back to the hardcoded default output.
+///
+/// Tokens available in custom templates:
+/// - `{{module_name}}` — title-cased directory name
+/// - `{{c4_level}}` — "container" or "component"
+/// - `{{file_rows}}` — pre-rendered table rows (one per source file, with `//! ` prefix)
+pub fn suggest_annotation(dir: &Path, template: Option<&str>) -> String {
     let c4_level = infer_c4_level(dir);
     let source_files = scan_source_files(dir);
     let module_name = derive_module_name(dir);
 
+    let file_rows = source_files
+        .iter()
+        .map(|f| format!("//! | `{}` | -- | [TODO] | active |", f))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if let Some(tmpl) = template {
+        return CustomTemplates::substitute(
+            tmpl,
+            &[
+                ("module_name", &module_name),
+                ("c4_level", c4_level),
+                ("file_rows", &file_rows),
+            ],
+        );
+    }
+
+    // Hardcoded default (fallback when no .archidoc/custom/mod.rs exists)
     let mut output = String::new();
     output.push_str(&format!("//! @c4 {}\n", c4_level));
     output.push_str("//!\n");
@@ -20,7 +46,7 @@ pub fn suggest_annotation(dir: &Path) -> String {
         output.push_str("//!\n");
         output.push_str("//! | File | Pattern | Purpose | Health |\n");
         output.push_str("//! |------|---------|---------|--------|\n");
-        for file in source_files {
+        for file in &source_files {
             output.push_str(&format!("//! | `{}` | -- | [TODO] | active |\n", file));
         }
     }
@@ -178,7 +204,7 @@ mod tests {
 
         fs::write(dir.join("routes.rs"), "").unwrap();
 
-        let annotation = suggest_annotation(&dir);
+        let annotation = suggest_annotation(&dir, None);
         assert!(annotation.contains("[TODO]"));
         assert!(annotation.contains("[TODO: describe this module's responsibility]"));
     }
@@ -189,13 +215,38 @@ mod tests {
         let container_dir = tmp.path().join("src").join("api");
         fs::create_dir_all(&container_dir).unwrap();
 
-        let annotation = suggest_annotation(&container_dir);
+        let annotation = suggest_annotation(&container_dir, None);
         assert!(annotation.contains("@c4 container"));
 
         let component_dir = tmp.path().join("src").join("api").join("auth");
         fs::create_dir_all(&component_dir).unwrap();
 
-        let annotation = suggest_annotation(&component_dir);
+        let annotation = suggest_annotation(&component_dir, None);
         assert!(annotation.contains("@c4 component"));
+    }
+
+    #[test]
+    fn custom_template_tokens_substituted() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("src").join("api");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("routes.rs"), "").unwrap();
+
+        let tmpl = "//! @c4 {{c4_level}}\n//! # {{module_name}}\n{{file_rows}}";
+        let annotation = suggest_annotation(&dir, Some(tmpl));
+        assert!(annotation.contains("@c4 container"));
+        assert!(annotation.contains("# Api"));
+        assert!(annotation.contains("routes.rs"));
+    }
+
+    #[test]
+    fn missing_template_falls_back_to_default() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("src").join("api");
+        fs::create_dir_all(&dir).unwrap();
+
+        let annotation = suggest_annotation(&dir, None);
+        assert!(annotation.contains("//! @c4"));
+        assert!(annotation.contains("[TODO: describe this module's responsibility]"));
     }
 }

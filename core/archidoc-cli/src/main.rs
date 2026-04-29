@@ -155,6 +155,15 @@ fn main() {
         Verbosity::Normal
     };
 
+    // Load custom templates once from CWD — used by suggest and generate
+    let cwd = std::env::current_dir().expect("failed to get current directory");
+    let custom = archidoc_engine::custom::CustomTemplates::load(&cwd);
+    let table_columns = custom
+        .architecture_table
+        .as_deref()
+        .map(archidoc_engine::custom::parse_table_columns)
+        .unwrap_or_default();
+
     // Execute mode
     match mode {
         Mode::FromJsonStdin => {
@@ -162,7 +171,7 @@ fn main() {
             let root = cli
                 .path
                 .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
-            run_generate(&root, &docs, &cli.global, verbosity);
+            run_generate(&root, &docs, &cli.global, verbosity, &table_columns);
         }
         Mode::FromJsonFile => {
             let path = &cli.global.from_json_file[0];
@@ -170,7 +179,7 @@ fn main() {
             let root = cli
                 .path
                 .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
-            run_generate(&root, &docs, &cli.global, verbosity);
+            run_generate(&root, &docs, &cli.global, verbosity, &table_columns);
         }
         Mode::MergeIr => {
             if cli.global.from_json_file.len() < 2 {
@@ -190,7 +199,7 @@ fn main() {
             let root = cli
                 .path
                 .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
-            run_generate(&root, &docs, &cli.global, verbosity);
+            run_generate(&root, &docs, &cli.global, verbosity, &table_columns);
         }
         Mode::ValidateIr => {
             let json = if !cli.global.from_json_file.is_empty() {
@@ -222,7 +231,7 @@ fn main() {
             let docs = collect_all_docs(&root, verbosity);
 
             match mode {
-                Mode::Generate => run_generate(&root, &docs, &cli.global, verbosity),
+                Mode::Generate => run_generate(&root, &docs, &cli.global, verbosity, &table_columns),
                 Mode::Check => run_check(&root, &docs, &cli.global.output, cli.global.json),
                 Mode::Health => run_health(&docs, cli.global.json),
                 Mode::Validate => run_validate(&docs, cli.global.json),
@@ -258,6 +267,7 @@ fn run_generate(
     docs: &[archidoc_types::ModuleDoc],
     opts: &GlobalOpts,
     verbosity: Verbosity,
+    columns: &[String],
 ) {
     if verbosity != Verbosity::Quiet {
         println!("archidoc: {} modules", docs.len());
@@ -282,7 +292,7 @@ fn run_generate(
         root.join(&opts.output)
     };
     let link_base = output_path.parent().unwrap_or(root.as_path());
-    let content = archidoc_engine::architecture::generate(docs, link_base);
+    let content = archidoc_engine::architecture::generate(docs, link_base, columns);
 
     if let Some(parent) = output_path.parent() {
         if !parent.as_os_str().is_empty() {
@@ -437,12 +447,17 @@ fn run_suggest(path: &PathBuf) {
         eprintln!("error: path is not a directory: {}", path.display());
         std::process::exit(1);
     }
-    let annotation = archidoc_engine::suggest::suggest_annotation(path);
+    let cwd = std::env::current_dir().expect("failed to get current directory");
+    let custom = archidoc_engine::custom::CustomTemplates::load(&cwd);
+    let annotation = archidoc_engine::suggest::suggest_annotation(path, custom.suggest_rust.as_deref());
     print!("{}", annotation);
 }
 
 fn run_init(path: &Option<PathBuf>, lang: Option<&str>) {
     use archidoc_engine::init::{CommentStyle, wrap_jsdoc};
+    use archidoc_engine::custom::{
+        DEFAULT_SUGGEST_RUST, DEFAULT_SUGGEST_TS, DEFAULT_SUGGEST_MD, DEFAULT_ARCHITECTURE_TABLE,
+    };
 
     let root = path
         .clone()
@@ -466,6 +481,38 @@ fn run_init(path: &Option<PathBuf>, lang: Option<&str>) {
     match style {
         CommentStyle::TypeScript => print!("{}", wrap_jsdoc(&template)),
         _ => print!("{}", template),
+    }
+
+    // Scaffold .archidoc/custom/ with parameterized default templates.
+    // Existing files are never overwritten — user customizations are preserved.
+    let custom_dir = root.join(".archidoc").join("custom");
+    fs::create_dir_all(&custom_dir).expect("failed to create .archidoc/custom/");
+
+    let scaffolds: &[(&str, &str)] = &[
+        ("mod.rs", DEFAULT_SUGGEST_RUST),
+        ("index.ts", DEFAULT_SUGGEST_TS),
+        ("_index.md", DEFAULT_SUGGEST_MD),
+        ("architecture-table.md", DEFAULT_ARCHITECTURE_TABLE),
+    ];
+
+    let mut created = Vec::new();
+    for (filename, content) in scaffolds {
+        let dest = custom_dir.join(filename);
+        if !dest.exists() {
+            fs::write(&dest, content).unwrap_or_else(|e| {
+                eprintln!("warning: failed to write {}: {}", dest.display(), e);
+            });
+            created.push(filename.to_string());
+        }
+    }
+
+    if !created.is_empty() {
+        eprintln!("\nscaffolded .archidoc/custom/:");
+        for name in &created {
+            eprintln!("  {}", name);
+        }
+        eprintln!("edit these files to override suggest and summary table output.");
+        eprintln!("delete them to revert to built-in defaults.");
     }
 }
 

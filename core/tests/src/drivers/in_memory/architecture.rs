@@ -64,7 +64,7 @@ impl InMemoryArchitectureDriver {
 
     fn generate_architecture(&mut self) {
         let link_base = self.output_dir.path().to_path_buf();
-        let content = archidoc_engine::architecture::generate(&self.results, &link_base);
+        let content = archidoc_engine::architecture::generate(&self.results, &link_base, &[]);
         fs::write(self.arch_file_path(), &content)
             .expect("failed to write ARCHITECTURE.md");
         self.architecture_content = Some(content);
@@ -580,7 +580,7 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
 
     fn suggest_for(&mut self, element: &str) {
         let module_dir = self.source_tree.module_dir(element);
-        self.suggestion_output = Some(archidoc_engine::suggest::suggest_annotation(&module_dir));
+        self.suggestion_output = Some(archidoc_engine::suggest::suggest_annotation(&module_dir, None));
     }
 
     fn suggestion_output(&self) -> &str {

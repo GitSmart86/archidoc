@@ -18,10 +18,12 @@
 //! | `init.rs` | -- | Root-level project template generator | active |
 //! | `suggest.rs` | -- | Annotation scaffolding templates | active |
 //! | `merge.rs` | -- | Polyglot IR merging | active |
+//! | `custom.rs` | -- | Template loading and token substitution | stable |
 
 pub mod ai_context;
 pub mod architecture;
 pub mod check;
+pub mod custom;
 pub mod drawio;
 pub mod health;
 pub mod init;
