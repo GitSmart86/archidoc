@@ -24,6 +24,7 @@ export interface FileEntry {
   pattern_status: PatternStatus;
   purpose: string;
   health: HealthStatus;
+  extra?: Record<string, string>;
 }
 
 export interface ModuleDoc {

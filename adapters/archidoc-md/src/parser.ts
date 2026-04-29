@@ -91,20 +91,36 @@ export function extractRelationships(content: string): Relationship[] {
   return rels;
 }
 
+type ColumnKind = "name" | "pattern" | "purpose" | "health" | "extra";
+
+/** Known file table column names and the field they populate. */
+const KNOWN_FILE_COLUMNS: Array<[string, ColumnKind]> = [
+  ["file", "name"],
+  ["name", "name"],
+  ["pattern", "pattern"],
+  ["purpose", "purpose"],
+  ["description", "purpose"],
+  ["health", "health"],
+  ["status", "health"],
+];
+
+function classifyColumn(col: string): ColumnKind {
+  const lower = col.trim().toLowerCase();
+  const found = KNOWN_FILE_COLUMNS.find(([name]) => name === lower);
+  return found ? found[1] : "extra";
+}
+
 /**
  * Parse the markdown file table into FileEntry structs.
  *
- * Expects standard markdown table format:
- * ```
- * | File | Pattern | Purpose | Health |
- * |------|---------|---------|--------|
- * | `file.md` | -- | Description | stable |
- * ```
- *
- * Pattern column is optional for markdown files and defaults to "--".
+ * Detects the header row by the presence of a "File" or "Name" column.
+ * Column order is driven by the header, not hardcoded positions.
+ * Unknown column names are stored in `FileEntry.extra`.
  */
 export function extractFileTable(content: string): FileEntry[] {
   const entries: FileEntry[] = [];
+  let colKinds: ColumnKind[] = [];
+  let colNames: string[] = [];
   let inTable = false;
   let headerSeen = false;
 
@@ -112,13 +128,21 @@ export function extractFileTable(content: string): FileEntry[] {
     const trimmed = line.trim();
 
     if (!inTable) {
-      if (
-        trimmed.startsWith("|") &&
-        /file/i.test(trimmed) &&
-        /purpose/i.test(trimmed)
-      ) {
-        inTable = true;
-        continue;
+      if (trimmed.startsWith("|")) {
+        const headerCells = trimmed
+          .split("|")
+          .filter((s) => s.trim())
+          .map((s) => s.trim());
+        const hasFileCol = headerCells.some((c) => {
+          const lower = c.toLowerCase();
+          return lower === "file" || lower === "name";
+        });
+        if (hasFileCol) {
+          colKinds = headerCells.map(classifyColumn);
+          colNames = headerCells.map((c) => c.trim().toLowerCase());
+          inTable = true;
+          continue;
+        }
       }
     } else if (!headerSeen) {
       if (trimmed.startsWith("|") && trimmed.includes("---")) {
@@ -133,31 +157,45 @@ export function extractFileTable(content: string): FileEntry[] {
         .filter((s) => s.trim())
         .map((s) => s.trim());
 
-      if (cells.length >= 3) {
-        const filename = cells[0].replace(/`/g, "").trim();
+      let name = "";
+      let pattern = "--";
+      let patternStatus: PatternStatus = "planned";
+      let purpose = "";
+      let health: HealthStatus = "planned";
+      const extra: Record<string, string> = {};
 
-        // Support both 3-column (File | Purpose | Health)
-        // and 4-column (File | Pattern | Purpose | Health) tables
-        let pattern = "--";
-        let patternStatus: PatternStatus = "planned";
-        let purpose: string;
-        let health: HealthStatus;
-
-        if (cells.length >= 4) {
-          [pattern, patternStatus] = parsePatternField(cells[1]);
-          purpose = cells[2].trim();
-          health = parseHealth(cells[3]);
-        } else {
-          purpose = cells[1].trim();
-          health = parseHealth(cells[2]);
+      cells.forEach((cell, i) => {
+        const kind = colKinds[i];
+        const colName = colNames[i];
+        switch (kind) {
+          case "name":
+            name = cell.replace(/`/g, "").trim();
+            break;
+          case "pattern": {
+            const [p, ps] = parsePatternField(cell);
+            pattern = p;
+            patternStatus = ps;
+            break;
+          }
+          case "purpose":
+            purpose = cell.trim();
+            break;
+          case "health":
+            health = parseHealth(cell);
+            break;
+          default:
+            if (colName) extra[colName] = cell.trim();
         }
+      });
 
+      if (name) {
         entries.push({
-          name: filename,
+          name,
           pattern,
           pattern_status: patternStatus,
           purpose,
           health,
+          ...(Object.keys(extra).length > 0 ? { extra } : {}),
         });
       }
     }

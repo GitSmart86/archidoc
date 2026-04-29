@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
 
 use crate::annotation::{HealthStatus, PatternStatus};
@@ -48,6 +49,8 @@ pub struct FileEntry {
     pub pattern_status: PatternStatus,
     pub purpose: String,
     pub health: HealthStatus,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub extra: HashMap<String, String>,
 }
 
 /// A parsed module documentation unit.

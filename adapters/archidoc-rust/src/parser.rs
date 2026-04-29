@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -204,16 +205,45 @@ pub fn extract_parent_container(module_path: &str) -> Option<String> {
     }
 }
 
+/// Known file table column names mapped to the field they populate.
+///
+/// Lookup is case-insensitive by lowercase name. Any column not in this
+/// table is treated as an unknown column and stored in `FileEntry::extra`.
+const KNOWN_FILE_COLUMNS: &[(&str, FileCol)] = &[
+    ("file", FileCol::Name),
+    ("name", FileCol::Name),
+    ("pattern", FileCol::Pattern),
+    ("purpose", FileCol::Purpose),
+    ("description", FileCol::Purpose),
+    ("health", FileCol::Health),
+    ("status", FileCol::Health),
+];
+
+#[derive(Clone, Copy)]
+enum FileCol {
+    Name,
+    Pattern,
+    Purpose,
+    Health,
+}
+
+fn classify_header(col: &str) -> Option<FileCol> {
+    let lower = col.trim().to_lowercase();
+    KNOWN_FILE_COLUMNS
+        .iter()
+        .find(|(name, _)| *name == lower.as_str())
+        .map(|(_, kind)| *kind)
+}
+
 /// Parse the markdown file table into FileEntry structs.
 ///
-/// Expects format:
-/// ```text
-/// | File | Pattern | Purpose | Health |
-/// |------|---------|---------|--------|
-/// | `core.rs` | Facade | Entry point | stable |
-/// ```
+/// Detects the header row by the presence of a "File" or "Name" column.
+/// Column order is driven by the header, not hardcoded positions.
+/// Unknown column names are stored in `FileEntry::extra`.
 pub fn extract_file_table(content: &str) -> Vec<FileEntry> {
     let mut entries = Vec::new();
+    let mut col_kinds: Vec<Option<FileCol>> = Vec::new();
+    let mut col_names: Vec<String> = Vec::new();
     let mut in_table = false;
     let mut header_seen = false;
 
@@ -221,24 +251,31 @@ pub fn extract_file_table(content: &str) -> Vec<FileEntry> {
         let trimmed = line.trim();
 
         if !in_table {
-            // Look for table header
-            if trimmed.starts_with('|')
-                && (trimmed.contains("File") || trimmed.contains("file"))
-                && (trimmed.contains("Pattern") || trimmed.contains("pattern"))
-            {
-                in_table = true;
-                continue;
+            if trimmed.starts_with('|') {
+                let header_cells: Vec<&str> = trimmed
+                    .split('|')
+                    .filter(|s| !s.trim().is_empty())
+                    .map(|s| s.trim())
+                    .collect();
+                let has_file_col = header_cells.iter().any(|c| {
+                    let lower = c.to_lowercase();
+                    lower == "file" || lower == "name"
+                });
+                if has_file_col {
+                    col_kinds = header_cells.iter().map(|c| classify_header(c)).collect();
+                    col_names = header_cells.iter().map(|c| c.to_lowercase()).collect();
+                    in_table = true;
+                    continue;
+                }
             }
         } else if !header_seen {
-            // Skip the separator row (|------|...)
             if trimmed.starts_with('|') && trimmed.contains("---") {
                 header_seen = true;
                 continue;
             }
         } else {
-            // Parse data rows
             if !trimmed.starts_with('|') {
-                break; // End of table
+                break;
             }
 
             let cells: Vec<&str> = trimmed
@@ -247,22 +284,45 @@ pub fn extract_file_table(content: &str) -> Vec<FileEntry> {
                 .map(|s| s.trim())
                 .collect();
 
-            if cells.len() >= 4 {
-                let filename = cells[0]
-                    .trim_matches('`')
-                    .trim()
-                    .to_string();
+            let mut name = String::new();
+            let mut pattern = "--".to_string();
+            let mut pattern_status = PatternStatus::Planned;
+            let mut purpose = String::new();
+            let mut health = HealthStatus::Planned;
+            let mut extra: HashMap<String, String> = HashMap::new();
 
-                let (pattern, pattern_status) = parse_pattern_field(cells[1]);
-                let purpose = cells[2].trim().to_string();
-                let health = HealthStatus::parse(cells[3]);
+            for (i, &cell) in cells.iter().enumerate() {
+                match col_kinds.get(i) {
+                    Some(Some(FileCol::Name)) => {
+                        name = cell.trim_matches('`').trim().to_string();
+                    }
+                    Some(Some(FileCol::Pattern)) => {
+                        let (p, ps) = parse_pattern_field(cell);
+                        pattern = p;
+                        pattern_status = ps;
+                    }
+                    Some(Some(FileCol::Purpose)) => {
+                        purpose = cell.trim().to_string();
+                    }
+                    Some(Some(FileCol::Health)) => {
+                        health = HealthStatus::parse(cell);
+                    }
+                    _ => {
+                        if let Some(col_name) = col_names.get(i) {
+                            extra.insert(col_name.clone(), cell.trim().to_string());
+                        }
+                    }
+                }
+            }
 
+            if !name.is_empty() {
                 entries.push(FileEntry {
-                    name: filename,
+                    name,
                     pattern,
                     pattern_status,
                     purpose,
                     health,
+                    extra,
                 });
             }
         }

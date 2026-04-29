@@ -161,55 +161,74 @@ fn section_component_index(docs: &[ModuleDoc], root: &Path, columns: &[String]) 
     output
 }
 
+type ColumnResolver = fn(&ModuleDoc, &Path) -> String;
+
+/// Dispatch table mapping column names to resolver functions.
+///
+/// Lookup is case-insensitive (caller lowercases before matching).
+/// Follows SOFTWARE-PRINCIPLES.md Principle 2 — Declarative Over Imperative.
+const COLUMN_RESOLVERS: &[(&str, ColumnResolver)] = &[
+    ("module", col_module),
+    ("level", col_level),
+    ("pattern", col_pattern),
+    ("description", col_description),
+    ("source", col_source),
+    ("parent", col_parent),
+    ("health", col_health),
+];
+
+fn col_module(doc: &ModuleDoc, root: &Path) -> String {
+    let source = Path::new(&doc.source_file);
+    let rel = pathdiff::diff_paths(source, root)
+        .unwrap_or_else(|| source.to_path_buf());
+    format!(
+        "[{}]({})",
+        doc.module_path,
+        rel.display().to_string().replace('\\', "/")
+    )
+}
+
+fn col_level(doc: &ModuleDoc, _root: &Path) -> String {
+    doc.c4_level.to_string()
+}
+
+fn col_pattern(doc: &ModuleDoc, _root: &Path) -> String {
+    doc.pattern.clone()
+}
+
+fn col_description(doc: &ModuleDoc, _root: &Path) -> String {
+    doc.description.clone()
+}
+
+fn col_source(doc: &ModuleDoc, root: &Path) -> String {
+    let source = Path::new(&doc.source_file);
+    let rel = pathdiff::diff_paths(source, root)
+        .unwrap_or_else(|| source.to_path_buf());
+    rel.display().to_string().replace('\\', "/")
+}
+
+fn col_parent(doc: &ModuleDoc, _root: &Path) -> String {
+    doc.parent_container.clone().unwrap_or_else(|| "--".to_string())
+}
+
+fn col_health(doc: &ModuleDoc, _root: &Path) -> String {
+    if doc.files.is_empty() {
+        return "--".to_string();
+    }
+    let stable = doc.files.iter().filter(|f| f.health == HealthStatus::Stable).count();
+    let active = doc.files.iter().filter(|f| f.health == HealthStatus::Active).count();
+    let planned = doc.files.iter().filter(|f| f.health == HealthStatus::Planned).count();
+    format!("{} stable / {} active / {} planned", stable, active, planned)
+}
+
 /// Resolve a column name to its string value for a given ModuleDoc.
 fn resolve_column(col: &str, doc: &ModuleDoc, root: &Path) -> String {
-    match col.to_lowercase().as_str() {
-        "module" => {
-            let source = Path::new(&doc.source_file);
-            let rel = pathdiff::diff_paths(source, root)
-                .unwrap_or_else(|| source.to_path_buf());
-            format!(
-                "[{}]({})",
-                doc.module_path,
-                rel.display().to_string().replace('\\', "/")
-            )
-        }
-        "level" => doc.c4_level.to_string(),
-        "pattern" => doc.pattern.clone(),
-        "description" => doc.description.clone(),
-        "source" => {
-            let source = Path::new(&doc.source_file);
-            let rel = pathdiff::diff_paths(source, root)
-                .unwrap_or_else(|| source.to_path_buf());
-            rel.display().to_string().replace('\\', "/")
-        }
-        "parent" => doc
-            .parent_container
-            .clone()
-            .unwrap_or_else(|| "--".to_string()),
-        "health" => {
-            if doc.files.is_empty() {
-                return "--".to_string();
-            }
-            let stable = doc
-                .files
-                .iter()
-                .filter(|f| f.health == HealthStatus::Stable)
-                .count();
-            let active = doc
-                .files
-                .iter()
-                .filter(|f| f.health == HealthStatus::Active)
-                .count();
-            let planned = doc
-                .files
-                .iter()
-                .filter(|f| f.health == HealthStatus::Planned)
-                .count();
-            format!("{} stable / {} active / {} planned", stable, active, planned)
-        }
-        _ => "--".to_string(),
-    }
+    let lower = col.to_lowercase();
+    COLUMN_RESOLVERS
+        .iter()
+        .find(|(name, _)| *name == lower.as_str())
+        .map(|(_, f)| f(doc, root))
+        .unwrap_or_else(|| "--".to_string())
 }
 
 /// Flat relationship map across all modules.
