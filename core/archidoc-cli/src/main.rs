@@ -107,6 +107,27 @@ enum Commands {
     /// so you can customize suggest and summary table output.
     /// Existing files are never overwritten. Delete a file to revert to the built-in default.
     Templates,
+    /// Report all directories missing an _index.md annotation file (dry run)
+    ///
+    /// Walks the directory tree skipping node_modules, .git, _archive, _context,
+    /// and other non-content directories. Prints a sorted list of paths and a
+    /// summary count. Use `archidoc scaffold` to create stubs for all missing dirs.
+    Audit {
+        /// Path to project root (defaults to current directory)
+        path: Option<PathBuf>,
+    },
+    /// Create stub _index.md files for all directories missing one
+    ///
+    /// Each stub contains a `TODO: archidoc` marker and is intentionally missing
+    /// the @c4 annotation, so the archidoc-md walker ignores it until filled.
+    /// Idempotent — existing files are never overwritten.
+    ///
+    /// Find all stubs needing content:
+    ///   grep -rl "TODO: archidoc" . --include="_index.md"
+    Scaffold {
+        /// Path to project root (defaults to current directory)
+        path: Option<PathBuf>,
+    },
 }
 
 fn main() {
@@ -129,6 +150,14 @@ fn main() {
             }
             Commands::Templates => {
                 run_templates(&cli.path);
+                return;
+            }
+            Commands::Audit { path } => {
+                run_audit(path.as_deref());
+                return;
+            }
+            Commands::Scaffold { path } => {
+                run_scaffold(path.as_deref());
                 return;
             }
         }
@@ -550,6 +579,75 @@ fn run_templates(path: &Option<PathBuf>) {
     println!("edit these files to override suggest and summary table output.");
     println!("delete a file to revert that template to the built-in default.");
 }
+
+fn run_audit(path: Option<&std::path::Path>) {
+    let root = path
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
+
+    if !root.exists() {
+        eprintln!("error: path does not exist: {}", root.display());
+        std::process::exit(1);
+    }
+
+    let missing = archidoc_engine::scaffold::find_missing(&root);
+
+    if missing.is_empty() {
+        println!("all directories have _index.md files.");
+        return;
+    }
+
+    println!("missing _index.md: {} dirs", missing.len());
+    println!();
+    for dir in &missing {
+        // Print relative to root for readability
+        let display = dir.strip_prefix(&root).unwrap_or(dir);
+        println!("  {}", display.display());
+    }
+    println!();
+    println!("run `archidoc scaffold` to create stubs for all missing dirs.");
+}
+
+fn run_scaffold(path: Option<&std::path::Path>) {
+    let root = path
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
+
+    if !root.exists() {
+        eprintln!("error: path does not exist: {}", root.display());
+        std::process::exit(1);
+    }
+
+    let report = archidoc_engine::scaffold::write_stubs(&root);
+
+    for dir in &report.created {
+        let display = dir.strip_prefix(&root).unwrap_or(dir);
+        println!("created  {}", display.display());
+    }
+    for dir in &report.skipped {
+        let display = dir.strip_prefix(&root).unwrap_or(dir);
+        println!("skipped  {}", display.display());
+    }
+    for (dir, err) in &report.errors {
+        let display = dir.strip_prefix(&root).unwrap_or(dir);
+        eprintln!("error    {}  ({})", display.display(), err);
+    }
+
+    println!();
+    println!(
+        "created: {}  skipped: {}  errors: {}",
+        report.created.len(),
+        report.skipped.len(),
+        report.errors.len()
+    );
+
+    if !report.created.is_empty() {
+        println!();
+        println!("find stubs needing content:");
+        println!("  grep -rl \"TODO: archidoc\" . --include=\"_index.md\"");
+    }
+}
+
 
 // ---------------------------------------------------------------------------
 // Polyglot adapter detection — auto-detect and merge language adapters

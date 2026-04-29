@@ -17,6 +17,7 @@
 //! | `validate.rs` | -- | Ghost and orphan detection | stable |
 //! | `init.rs` | -- | Root-level project template generator | active |
 //! | `suggest.rs` | -- | Annotation scaffolding templates | active |
+//! | `scaffold.rs` | -- | Audit and stub generation for missing _index.md files | active |
 //! | `merge.rs` | -- | Polyglot IR merging | active |
 //! | `custom.rs` | -- | Template loading and token substitution | stable |
 
@@ -31,5 +32,6 @@ pub mod ir;
 pub mod merge;
 pub mod mermaid;
 pub mod plantuml;
+pub mod scaffold;
 pub mod suggest;
 pub mod validate;
