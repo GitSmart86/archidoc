@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -14,11 +15,10 @@ const SKIP_DIRS: &[&str] = &[
     "_context",
 ];
 
-/// File extensions to include in the files variant.
-/// Keeps the tree focused on documentation and source — skips build artifacts,
-/// lock files, images, etc.
+/// File extensions to include. Skips build artifacts, lock files, binaries.
 const INCLUDE_EXTENSIONS: &[&str] = &[
     ".md", ".rs", ".ts", ".js", ".toml", ".yaml", ".yml", ".json", ".py",
+    ".sh", ".ps1", ".drawio", ".csv",
 ];
 
 /// Files to always skip regardless of extension.
@@ -29,45 +29,60 @@ const SKIP_FILES: &[&str] = &[
     ".DS_Store",
 ];
 
-/// Generate a directory-only tree for `root`.
-///
-/// Produces indented markdown lines, one per directory, with a trailing `/`.
-/// Respects SKIP_DIRS. The root directory itself is shown as the first line.
-/// `max_depth` of `None` means unlimited.
-pub fn dirs_tree(root: &Path, max_depth: Option<usize>) -> String {
-    let root_name = root
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or(".");
+/// Dirs with more than this many files get a count summary instead of inline listing.
+const INLINE_THRESHOLD: usize = 6;
 
+// ── Public API ────────────────────────────────────────────────────────────────
+
+/// Generate a compact dirs-only tree.
+///
+/// Format: one full relative path per line, no indentation, trailing `/`.
+/// Grep-friendly — every line is self-contained.
+///
+/// ```text
+/// 0_White/
+/// 0_White/Framework/
+/// 0_White/Framework/-1_worldview/
+/// ```
+pub fn compact_dirs_tree(root: &Path, max_depth: Option<usize>) -> String {
     let mut out = String::new();
-    out.push_str(&format!("{}/\n", root_name));
-    walk_dirs(&mut out, root, 1, max_depth);
+    walk_dirs(&mut out, root, root, 0, max_depth);
     out
 }
 
-/// Generate a directory + files tree for `root`.
+/// Generate a compact dirs+files tree.
 ///
-/// Produces indented markdown lines. Directories get a trailing `/`.
-/// Files are shown under their parent directory, filtered by INCLUDE_EXTENSIONS.
-/// `max_depth` of `None` means unlimited.
-pub fn files_tree(root: &Path, max_depth: Option<usize>) -> String {
-    let root_name = root
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or(".");
-
+/// Format:
+/// - Root files on the first line: `[root] file1, file2`
+/// - Each dir on its own line with an adaptive file listing:
+///   - ≤6 files  → inline: `path/ {file1, file2, file3}`
+///   - >6 files  → count:  `path/ [12 files: 10.md 2.rs]`
+///   - No files  → just the path
+///
+/// ```text
+/// [root] CLAUDE.md, _index.md
+/// 0_White/ {9+2.md, _index.md}
+/// 0_White/Framework/ [10 files: 10.md]
+/// 0_White/Framework/-1_worldview/ {README.md, _index.md, claims.md, ...}
+/// ```
+pub fn compact_files_tree(root: &Path, max_depth: Option<usize>) -> String {
     let mut out = String::new();
-    out.push_str(&format!("{}/\n", root_name));
-    walk_files(&mut out, root, 1, max_depth, true);
+
+    // Root-level files on the first line
+    let root_files = collect_files(root);
+    if !root_files.is_empty() {
+        out.push_str(&format!("[root] {}\n", root_files.join(", ")));
+    }
+
+    walk_files(&mut out, root, root, 0, max_depth);
     out
 }
 
 // ── Internal walkers ──────────────────────────────────────────────────────────
 
-fn walk_dirs(out: &mut String, dir: &Path, depth: usize, max_depth: Option<usize>) {
+fn walk_dirs(out: &mut String, root: &Path, dir: &Path, depth: usize, max_depth: Option<usize>) {
     if let Some(max) = max_depth {
-        if depth > max {
+        if depth >= max {
             return;
         }
     }
@@ -76,29 +91,17 @@ fn walk_dirs(out: &mut String, dir: &Path, depth: usize, max_depth: Option<usize
     subdirs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
     for subdir in subdirs {
-        let name = subdir.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        out.push_str(&format!("{}{}/\n", indent(depth), name));
-        walk_dirs(out, &subdir, depth + 1, max_depth);
+        let rel = subdir.strip_prefix(root).unwrap_or(&subdir);
+        // Normalise to forward slashes for cross-platform output
+        let rel_str = rel.to_string_lossy().replace('\\', "/");
+        out.push_str(&format!("{}/\n", rel_str));
+        walk_dirs(out, root, &subdir, depth + 1, max_depth);
     }
 }
 
-fn walk_files(
-    out: &mut String,
-    dir: &Path,
-    depth: usize,
-    max_depth: Option<usize>,
-    is_root_call: bool,
-) {
-    // Emit files in this directory first (unless this is the root call —
-    // root-level files are listed before subdirs).
-    if !is_root_call {
-        emit_files(out, dir, depth);
-    } else {
-        emit_files(out, dir, depth);
-    }
-
+fn walk_files(out: &mut String, root: &Path, dir: &Path, depth: usize, max_depth: Option<usize>) {
     if let Some(max) = max_depth {
-        if depth > max {
+        if depth >= max {
             return;
         }
     }
@@ -107,14 +110,25 @@ fn walk_files(
     subdirs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
     for subdir in subdirs {
-        let name = subdir.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        out.push_str(&format!("{}{}/\n", indent(depth), name));
-        walk_files(out, &subdir, depth + 1, max_depth, false);
+        let rel = subdir.strip_prefix(root).unwrap_or(&subdir);
+        let rel_str = rel.to_string_lossy().replace('\\', "/");
+        let files = collect_files(&subdir);
+
+        let suffix = format_file_suffix(&files);
+        if suffix.is_empty() {
+            out.push_str(&format!("{}/\n", rel_str));
+        } else {
+            out.push_str(&format!("{}/{}\n", rel_str, suffix));
+        }
+
+        walk_files(out, root, &subdir, depth + 1, max_depth);
     }
 }
 
-fn emit_files(out: &mut String, dir: &Path, depth: usize) {
-    let Ok(entries) = fs::read_dir(dir) else { return };
+// ── File collection and formatting ────────────────────────────────────────────
+
+fn collect_files(dir: &Path) -> Vec<String> {
+    let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
 
     let mut files: Vec<String> = entries
         .flatten()
@@ -127,16 +141,45 @@ fn emit_files(out: &mut String, dir: &Path, depth: usize) {
             if SKIP_FILES.contains(&name.as_str()) {
                 return None;
             }
-            let has_ext = INCLUDE_EXTENSIONS.iter().any(|ext| name.ends_with(ext));
-            if has_ext { Some(name) } else { None }
+            let included = INCLUDE_EXTENSIONS.iter().any(|ext| name.ends_with(ext));
+            if included { Some(name) } else { None }
         })
         .collect();
 
     files.sort();
+    files
+}
 
-    for file in files {
-        out.push_str(&format!("{}{}\n", indent(depth), file));
+/// Format the file suffix for a directory line.
+///
+/// - Empty file list  → empty string (no suffix)
+/// - ≤ INLINE_THRESHOLD → ` {file1, file2, ...}`
+/// - > INLINE_THRESHOLD → ` [N files: Xmd Yrs ...]`
+fn format_file_suffix(files: &[String]) -> String {
+    if files.is_empty() {
+        return String::new();
     }
+    if files.len() <= INLINE_THRESHOLD {
+        return format!(" {{{}}}", files.join(", "));
+    }
+    // Count by extension
+    let mut ext_counts: HashMap<String, usize> = HashMap::new();
+    for file in files {
+        let ext = std::path::Path::new(file)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("other")
+            .to_string();
+        *ext_counts.entry(ext).or_default() += 1;
+    }
+    // Sort by count descending, then alphabetically
+    let mut ext_list: Vec<(String, usize)> = ext_counts.into_iter().collect();
+    ext_list.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    let breakdown: Vec<String> = ext_list
+        .iter()
+        .map(|(ext, count)| format!("{}.{}", count, ext))
+        .collect();
+    format!(" [{} files: {}]", files.len(), breakdown.join(" "))
 }
 
 fn read_subdirs(dir: &Path) -> Vec<std::path::PathBuf> {
@@ -157,8 +200,4 @@ fn read_subdirs(dir: &Path) -> Vec<std::path::PathBuf> {
             Some(path)
         })
         .collect()
-}
-
-fn indent(depth: usize) -> String {
-    "  ".repeat(depth)
 }
