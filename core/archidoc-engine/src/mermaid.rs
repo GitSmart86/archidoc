@@ -67,7 +67,7 @@ fn resolve_rel_target(
 
     // Direct match against a declared node.
     if declared_paths.contains(&resolved) {
-        return Some(resolved.replace('.', "_"));
+        return Some(to_mermaid_id(&resolved));
     }
 
     // Collapse to the longest declared-node prefix.
@@ -75,7 +75,7 @@ fn resolve_rel_target(
         .iter()
         .filter(|p| resolved.starts_with(&format!("{}.", p)))
         .max_by_key(|p| p.len())
-        .map(|p| p.replace('.', "_"))
+        .map(|p| to_mermaid_id(p))
 }
 
 /// Return the Mermaid C4 container diagram as a markdown code block string.
@@ -87,7 +87,7 @@ pub fn container_diagram(docs: &[ModuleDoc]) -> String {
 
     let mut container_defs = String::new();
     for doc in &containers {
-        let id = doc.module_path.replace('.', "_");
+        let id = to_mermaid_id(&doc.module_path);
         let name = to_title_case(&doc.module_path);
         container_defs.push_str(&format!(
             "        Container({}, \"{}\", \"{}\", \"{}\")\n",
@@ -102,7 +102,7 @@ pub fn container_diagram(docs: &[ModuleDoc]) -> String {
     let mut rel_defs = String::new();
     let mut seen_rels: HashSet<String> = HashSet::new();
     for doc in &containers {
-        let from_id = doc.module_path.replace('.', "_");
+        let from_id = to_mermaid_id(&doc.module_path);
         for rel in &doc.relationships {
             if let Some(to_id) = resolve_rel_target(&rel.target, &name_map, &declared_paths) {
                 let rel_key = format!("{}|{}|{}", from_id, to_id, rel.label);
@@ -183,7 +183,7 @@ pub fn component_diagram(docs: &[ModuleDoc]) -> String {
     let mut containment_rels: Vec<(String, String)> = Vec::new();
 
     for (container_path, comps) in &by_container {
-        let container_id = container_path.replace('.', "_");
+        let container_id = to_mermaid_id(container_path);
         let container_name = to_title_case(container_path);
 
         // Build immediate-parent map within this container group.
@@ -230,8 +230,8 @@ pub fn component_diagram(docs: &[ModuleDoc]) -> String {
     // Containment arrows (parent -> child)
     let mut rel_defs = String::new();
     for (from, to) in &containment_rels {
-        let from_id = from.replace('.', "_");
-        let to_id = to.replace('.', "_");
+        let from_id = to_mermaid_id(from);
+        let to_id = to_mermaid_id(to);
         rel_defs.push_str(&format!(
             "    Rel({}, {}, \"contains\")\n",
             from_id, to_id
@@ -249,7 +249,7 @@ pub fn component_diagram(docs: &[ModuleDoc]) -> String {
         .collect();
     let mut seen_rels: HashSet<String> = HashSet::new();
     for doc in &components {
-        let from_id = doc.module_path.replace('.', "_");
+        let from_id = to_mermaid_id(&doc.module_path);
         for rel in &doc.relationships {
             if let Some(to_id) = resolve_rel_target(&rel.target, &name_map, &declared_paths) {
                 let rel_key = format!("{}|{}|{}", from_id, to_id, rel.label);
@@ -278,7 +278,7 @@ fn emit_node(
     depth: usize,
 ) {
     let indent = "    ".repeat(depth);
-    let id = doc.module_path.replace('.', "_");
+    let id = to_mermaid_id(&doc.module_path);
     let name = doc
         .module_path
         .split('.')
@@ -318,6 +318,15 @@ pub fn generate_component(output_dir: &Path, docs: &[ModuleDoc]) {
     );
 
     fs::write(&filepath, content).expect("Failed to write c4-component.md");
+}
+
+/// Convert a module path to a valid Mermaid node identifier.
+///
+/// Mermaid identifiers must be alphanumeric + underscore only.
+/// Module paths use `.` as separator and directory names may contain `-`.
+/// Both are replaced with `_`.
+fn to_mermaid_id(s: &str) -> String {
+    s.replace('.', "_").replace('-', "_")
 }
 
 fn to_title_case(s: &str) -> String {
