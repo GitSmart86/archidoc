@@ -46,6 +46,15 @@ npm install archidoc-ts
 ## Usage
 
 ```bash
+# Print full usage reference (all commands and options)
+archidoc info
+archidoc --help
+archidoc -h
+```
+
+### Generate architecture docs
+
+```bash
 # Generate ARCHITECTURE.md + ARCHITECTURE.ai.md from source annotations
 archidoc .
 
@@ -57,20 +66,11 @@ archidoc . --no-ai
 
 # Also generate PlantUML and/or draw.io sidecar files
 archidoc . --plantuml --drawio
+```
 
-# Scaffold root-level lib.rs template for a new project
-archidoc init
+### Drift detection and validation
 
-# Scaffold with explicit language (if auto-detection fails)
-archidoc init --lang rust
-archidoc init --lang ts
-
-# Generate annotation template for a module directory
-archidoc suggest src/api/
-
-# Write the template directly into a module entry file
-archidoc suggest src/api/ >> src/api/mod.rs
-
+```bash
 # Check for documentation drift (CI gate — exits non-zero on drift)
 archidoc --check .
 
@@ -79,15 +79,121 @@ archidoc --health .
 
 # Validate file tables (ghost/orphan detection)
 archidoc --validate .
+```
 
-# Export JSON IR for cross-language pipelines
+### Directory tree generation
+
+```bash
+# AI-optimized dirs-only tree  → _context/ARCHITECTURE.ai.tree.md
+archidoc tree .
+
+# AI-optimized dirs+files tree → _context/ARCHITECTURE.ai.files.md
+archidoc tree . --files
+
+# Both AI variants in one pass
+archidoc tree . --both
+
+# Human-readable tree with icons → _context/ARCHITECTURE.tree.md
+archidoc tree . --human
+
+# All three files in one pass
+archidoc tree . --both --human
+
+# Limit depth (useful for CLAUDE.md snippets)
+archidoc tree . --depth 3
+
+# Custom output directory
+archidoc tree . --both --out docs/
+```
+
+**Output files:**
+
+| File | Format | Best for |
+|------|--------|----------|
+| `ARCHITECTURE.ai.tree.md` | Brace-expanded dirs, no files | AI navigation — where does X live? |
+| `ARCHITECTURE.ai.files.md` | Compact dirs+files, adaptive inline/count, sibling-collapse | AI file lookup |
+| `ARCHITECTURE.tree.md` | Indented bullets with emoji icons | Human browsing |
+
+**Sibling-collapse** — when 3+ sibling dirs share an identical file set and no nested subdirs, the AI files tree collapses them to one line:
+
+```
+engine-specs/{act, cm, comm, dmn, eml, im, int, log}/ [each: axis-card.json, meta.json, module-doc.md]
+```
+
+**Config** — create `.archidoc/config.tree.json` at your project root to customize exclusions, extensions, threshold, and icons:
+
+```json
+{
+  "exclude_dirs": ["__pycache__", "conversation", "*.tmp"],
+  "exclude_files": ["*.png", "*.exe", "*.lock"],
+  "include_extensions": [],
+  "inline_threshold": 6,
+  "icons": {
+    "directory": "📁",
+    "file": "📄",
+    "by_ext": {
+      ".md": "📖",
+      ".rs": "🔷",
+      ".ts": "🟦",
+      ".json": "⚙️",
+      ".toml": "⚙️",
+      ".py": "🐍",
+      ".sh": "📜"
+    }
+  }
+}
+```
+
+- `exclude_dirs` / `exclude_files` are **additive** (merged with built-in defaults).
+  Supports glob patterns: `*.jsonl`, `__pycache__`, `tmp*`.
+- `include_extensions` **replaces** the default extension list if non-empty.
+- `icons` entries **override** defaults; omitted keys keep their defaults.
+
+### Scaffold and audit
+
+```bash
+# Report all directories missing an _index.md (dry run)
+archidoc audit .
+
+# Create stub _index.md files for every dir missing one (idempotent)
+archidoc scaffold .
+
+# Find all stubs still needing real content
+grep -rl "TODO: archidoc" . --include="_index.md"
+```
+
+Stubs are intentionally invisible to the archidoc walker — they omit the `@c4` annotation. Add the annotation when you fill in the description.
+
+### Annotation scaffolding
+
+```bash
+# Scaffold root-level lib.rs / index.ts template
+archidoc init
+archidoc init --lang rust
+archidoc init --lang ts
+
+# Generate annotation template for a module directory
+archidoc suggest src/api/
+archidoc suggest src/api/ >> src/api/mod.rs
+
+# Copy default templates to .archidoc/custom/ for editing
+archidoc templates
+```
+
+### JSON IR (polyglot pipelines)
+
+```bash
+# Export JSON IR to stdout
 archidoc --emit-ir .
 
-# Generate ARCHITECTURE.md from JSON IR (any language adapter)
+# Generate ARCHITECTURE.md from JSON IR
 archidoc --from-json-file ir.json .
 
-# Merge IR from multiple adapters (polyglot projects)
+# Merge IR from multiple adapters
 archidoc --merge-ir --from-json-file rust.json --from-json-file ts.json .
+
+# Validate IR (check schema conformance)
+archidoc --validate-ir --from-json-file ir.json
 ```
 
 ## Annotation Convention

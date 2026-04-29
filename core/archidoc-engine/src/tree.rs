@@ -34,17 +34,60 @@ const DEFAULT_INLINE_THRESHOLD: usize = 6;
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
+/// Per-extension icon mapping for human-readable output.
+pub struct IconConfig {
+    /// Emoji for directories.
+    pub directory: String,
+    /// Fallback emoji for files with no specific mapping.
+    pub file: String,
+    /// Map from `.ext` (with leading dot) to emoji string.
+    pub by_ext: HashMap<String, String>,
+}
+
+impl Default for IconConfig {
+    fn default() -> Self {
+        let by_ext = [
+            (".md",    "📖"),
+            (".rs",    "🔷"),
+            (".ts",    "🟦"),
+            (".js",    "🟨"),
+            (".json",  "⚙️"),
+            (".toml",  "⚙️"),
+            (".yaml",  "🗂️"),
+            (".yml",   "🗂️"),
+            (".py",    "🐍"),
+            (".sh",    "📜"),
+            (".ps1",   "📜"),
+            (".csv",   "📊"),
+            (".drawio","🖊️"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+
+        Self {
+            directory: "📁".to_string(),
+            file: "📄".to_string(),
+            by_ext,
+        }
+    }
+}
+
 /// Runtime configuration for tree generation, resolved from built-in defaults
 /// merged with `.archidoc/config.tree.json` at the project root.
 pub struct TreeConfig {
     /// Merged exclusion set: DEFAULT_SKIP_DIRS + user additions.
+    /// Supports glob patterns: `*suffix`, `prefix*`, or exact name.
     pub exclude_dirs: Vec<String>,
     /// Merged exclusion set: DEFAULT_SKIP_FILES + user additions.
+    /// Supports glob patterns: `*suffix`, `prefix*`, or exact name.
     pub exclude_files: Vec<String>,
     /// If config specifies extensions, replaces defaults. Otherwise uses DEFAULT_INCLUDE_EXTENSIONS.
     pub include_extensions: Vec<String>,
-    /// Dirs with more files than this threshold get a count summary. Default: 6.
+    /// Dirs with more files than this emit a count summary. Default: 6.
     pub inline_threshold: usize,
+    /// Icon config for human-readable output (`--human`).
+    pub icons: IconConfig,
 }
 
 impl TreeConfig {
@@ -55,6 +98,7 @@ impl TreeConfig {
             exclude_files: DEFAULT_SKIP_FILES.iter().map(|s| s.to_string()).collect(),
             include_extensions: DEFAULT_INCLUDE_EXTENSIONS.iter().map(|s| s.to_string()).collect(),
             inline_threshold: DEFAULT_INLINE_THRESHOLD,
+            icons: IconConfig::default(),
         }
     }
 
@@ -62,9 +106,11 @@ impl TreeConfig {
     ///
     /// - Missing file → returns defaults silently.
     /// - Invalid JSON → prints a warning and returns defaults.
-    /// - `exclude_dirs` / `exclude_files` → **additive** (built-ins are always included).
+    /// - `exclude_dirs` / `exclude_files` → **additive** (built-ins always included).
+    ///   Supports glob patterns: `*.jsonl`, `__pycache__`, etc.
     /// - `include_extensions` → **replaces** defaults if the array is non-empty.
     /// - `inline_threshold` → **overrides** the default if present.
+    /// - `icons` → **merges** per-extension overrides over defaults.
     pub fn load(root: &Path) -> Self {
         let config_path = root.join(".archidoc").join("config.tree.json");
         let mut config = Self::defaults();
@@ -72,7 +118,6 @@ impl TreeConfig {
         let Ok(content) = fs::read_to_string(&config_path) else {
             return config;
         };
-
         let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
             eprintln!("warning: .archidoc/config.tree.json is not valid JSON — using defaults");
             return config;
@@ -117,19 +162,34 @@ impl TreeConfig {
             config.inline_threshold = n as usize;
         }
 
+        // Icons: merge per-extension overrides; top-level directory/file keys replace defaults
+        if let Some(icons_obj) = value.get("icons") {
+            if let Some(dir_icon) = icons_obj.get("directory").and_then(|v| v.as_str()) {
+                config.icons.directory = dir_icon.to_string();
+            }
+            if let Some(file_icon) = icons_obj.get("file").and_then(|v| v.as_str()) {
+                config.icons.file = file_icon.to_string();
+            }
+            if let Some(by_ext) = icons_obj.get("by_ext").and_then(|v| v.as_object()) {
+                for (ext, icon) in by_ext {
+                    if let Some(icon_str) = icon.as_str() {
+                        config.icons.by_ext.insert(ext.clone(), icon_str.to_string());
+                    }
+                }
+            }
+        }
+
         config
     }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/// Generate a brace-expanded compact dirs-only tree.
+/// Generate a brace-expanded compact dirs-only tree (AI-optimized).
 ///
 /// Each line shows one branch directory and its immediate subdirectory children
-/// in a `{child1, child2}` brace list. Leaf directories (no subdirs) never get
-/// their own line — they appear only as entries in their parent's brace list.
-/// This eliminates repeated path prefixes and collapses wide flat dirs to a
-/// single line each.
+/// in a `{child1, child2}` brace list. Leaf directories appear only in their
+/// parent's brace list, never as standalone lines.
 ///
 /// ```text
 /// ./ {0_White, 1_Yellow, 2_Blue, 3_Red, todo, tools}
@@ -142,18 +202,16 @@ pub fn compact_dirs_tree(root: &Path, max_depth: Option<usize>, config: &TreeCon
     out
 }
 
-/// Generate a compact dirs+files tree.
+/// Generate a compact dirs+files tree (AI-optimized).
 ///
-/// Format:
-/// - Root files on the first line: `[root] file1, file2`
-/// - Each dir on its own line with an adaptive file listing:
-///   - ≤ inline_threshold files → inline: `path/ {file1, file2, file3}`
-///   - > inline_threshold files → count:  `path/ [12 files: 10.md 2.rs]`
-///   - No files                 → just the path
+/// - Root files: `[root] file1, file2`
+/// - ≤ inline_threshold files → inline: `path/ {file1, file2}`
+/// - > inline_threshold files → count: `path/ [12 files: 10.md 2.rs]`
+/// - Sibling dirs with identical file sets (≥ 3) → collapsed:
+///   `parent/{d1, d2, d3}/ [each: f1, f2, f3]`
 pub fn compact_files_tree(root: &Path, max_depth: Option<usize>, config: &TreeConfig) -> String {
     let mut out = String::new();
 
-    // Root-level files on the first line
     let root_files = collect_files(root, config);
     if !root_files.is_empty() {
         out.push_str(&format!("[root] {}\n", root_files.join(", ")));
@@ -161,6 +219,43 @@ pub fn compact_files_tree(root: &Path, max_depth: Option<usize>, config: &TreeCo
 
     walk_files(&mut out, root, root, 0, max_depth, config);
     out
+}
+
+/// Generate a human-readable indented tree with emoji icons.
+///
+/// Format:
+/// ```text
+/// - 📁 .
+///   - 📖 CLAUDE.md
+///   - 📁 0_White
+///     - 📖 _index.md
+///     - 📁 Framework
+///       ...
+/// ```
+///
+/// Icons are configured in `.archidoc/config.tree.json` under the `icons` key.
+pub fn compact_human_tree(root: &Path, max_depth: Option<usize>, config: &TreeConfig) -> String {
+    let mut out = String::new();
+    walk_human(&mut out, root, root, 0, max_depth, config);
+    out
+}
+
+// ── Glob pattern matching ─────────────────────────────────────────────────────
+
+/// Match a name against a pattern.
+///
+/// Supports three forms:
+/// - `*suffix` — name ends with suffix (e.g. `*.jsonl`)
+/// - `prefix*` — name starts with prefix (e.g. `__pycache__*`)
+/// - exact    — name == pattern (e.g. `node_modules`)
+fn matches_pattern(pattern: &str, name: &str) -> bool {
+    if let Some(suffix) = pattern.strip_prefix('*') {
+        name.ends_with(suffix)
+    } else if let Some(prefix) = pattern.strip_suffix('*') {
+        name.starts_with(prefix)
+    } else {
+        pattern == name
+    }
 }
 
 // ── Internal walkers ──────────────────────────────────────────────────────────
@@ -179,16 +274,7 @@ fn brace_walk(
     }
     subdirs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
-    // Relative path display — root itself shown as "."
-    let rel = if dir == root {
-        ".".to_string()
-    } else {
-        dir.strip_prefix(root)
-            .map(|p| p.to_string_lossy().replace('\\', "/"))
-            .unwrap_or_else(|_| dir.to_string_lossy().replace('\\', "/"))
-    };
-
-    // Child names without trailing slash — redundant inside braces
+    let rel = dir_rel(root, dir);
     let children: Vec<String> = subdirs
         .iter()
         .filter_map(|s| s.file_name().and_then(|n| n.to_str()).map(str::to_string))
@@ -196,7 +282,6 @@ fn brace_walk(
 
     out.push_str(&format!("{}/ {{{}}}\n", rel, children.join(", ")));
 
-    // Respect depth limit — still emit the current line, just don't recurse
     if let Some(max) = max_depth {
         if depth >= max {
             return;
@@ -225,9 +310,25 @@ fn walk_files(
     let mut subdirs = read_subdirs(dir, config);
     subdirs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
+    // Sibling-collapse: if all subdirs are leaves with identical non-empty file sets,
+    // emit one compressed line instead of N individual lines.
+    if let Some(collapse) = try_sibling_collapse(&subdirs, config) {
+        let prefix = dir_rel(root, dir);
+        out.push_str(&format!(
+            "{}/{{{}}}/  [each: {}]\n",
+            prefix,
+            collapse.names.join(", "),
+            collapse.files.join(", ")
+        ));
+        return;
+    }
+
     for subdir in subdirs {
-        let rel = subdir.strip_prefix(root).unwrap_or(&subdir);
-        let rel_str = rel.to_string_lossy().replace('\\', "/");
+        let rel_str = subdir
+            .strip_prefix(root)
+            .unwrap_or(&subdir)
+            .to_string_lossy()
+            .replace('\\', "/");
         let files = collect_files(&subdir, config);
 
         let suffix = format_file_suffix(&files, config);
@@ -239,6 +340,96 @@ fn walk_files(
 
         walk_files(out, root, &subdir, depth + 1, max_depth, config);
     }
+}
+
+fn walk_human(
+    out: &mut String,
+    root: &Path,
+    dir: &Path,
+    depth: usize,
+    max_depth: Option<usize>,
+    config: &TreeConfig,
+) {
+    let indent = "  ".repeat(depth);
+    let dir_name = if dir == root {
+        ".".to_string()
+    } else {
+        dir.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("?")
+            .to_string()
+    };
+
+    out.push_str(&format!("{}- {} {}\n", indent, config.icons.directory, dir_name));
+
+    // Files directly in this dir (sorted)
+    let files = collect_files(dir, config);
+    for file in &files {
+        let icon = icon_for_file(file, config);
+        out.push_str(&format!("{}  - {} {}\n", indent, icon, file));
+    }
+
+    if let Some(max) = max_depth {
+        if depth >= max {
+            return;
+        }
+    }
+
+    let mut subdirs = read_subdirs(dir, config);
+    subdirs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+    for subdir in subdirs {
+        walk_human(out, root, &subdir, depth + 1, max_depth, config);
+    }
+}
+
+// ── Sibling-collapse ──────────────────────────────────────────────────────────
+
+struct SiblingCollapse {
+    /// Sorted directory names.
+    names: Vec<String>,
+    /// The common file list shared by every sibling.
+    files: Vec<String>,
+}
+
+/// Check whether all `subdirs` qualify for a single collapsed line.
+///
+/// Conditions (matching dir-tree compact mode):
+/// 1. At least 3 siblings.
+/// 2. Every sibling is a leaf dir (no nested subdirs of its own).
+/// 3. Every sibling has an identical, non-empty file set.
+fn try_sibling_collapse(subdirs: &[std::path::PathBuf], config: &TreeConfig) -> Option<SiblingCollapse> {
+    if subdirs.len() < 3 {
+        return None;
+    }
+
+    let mut signatures: Vec<Vec<String>> = Vec::with_capacity(subdirs.len());
+    for subdir in subdirs {
+        // Must be a leaf — no nested subdirs
+        if !read_subdirs(subdir, config).is_empty() {
+            return None;
+        }
+        let files = collect_files(subdir, config);
+        if files.is_empty() {
+            return None; // non-empty signature required
+        }
+        signatures.push(files);
+    }
+
+    // All signatures must be identical
+    let first = &signatures[0];
+    if !signatures.iter().all(|s| s == first) {
+        return None;
+    }
+
+    let names: Vec<String> = subdirs
+        .iter()
+        .filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(str::to_string))
+        .collect();
+
+    Some(SiblingCollapse {
+        names,
+        files: first.clone(),
+    })
 }
 
 // ── File collection and formatting ────────────────────────────────────────────
@@ -254,7 +445,7 @@ fn collect_files(dir: &Path, config: &TreeConfig) -> Vec<String> {
                 return None;
             }
             let name = path.file_name()?.to_string_lossy().to_string();
-            if config.exclude_files.iter().any(|f| f == &name) {
+            if config.exclude_files.iter().any(|p| matches_pattern(p, &name)) {
                 return None;
             }
             let included = config.include_extensions.iter().any(|ext| name.ends_with(ext.as_str()));
@@ -268,9 +459,9 @@ fn collect_files(dir: &Path, config: &TreeConfig) -> Vec<String> {
 
 /// Format the file suffix for a directory line.
 ///
-/// - Empty file list              → empty string (no suffix)
-/// - ≤ inline_threshold files     → ` {file1, file2, ...}`
-/// - > inline_threshold files     → ` [N files: Xmd Yrs ...]`
+/// - Empty               → empty string
+/// - ≤ inline_threshold  → ` {file1, file2, ...}`
+/// - > inline_threshold  → ` [N files: Xmd Yrs ...]`
 fn format_file_suffix(files: &[String], config: &TreeConfig) -> String {
     if files.is_empty() {
         return String::new();
@@ -278,17 +469,15 @@ fn format_file_suffix(files: &[String], config: &TreeConfig) -> String {
     if files.len() <= config.inline_threshold {
         return format!(" {{{}}}", files.join(", "));
     }
-    // Count by extension
     let mut ext_counts: HashMap<String, usize> = HashMap::new();
     for file in files {
-        let ext = std::path::Path::new(file)
+        let ext = Path::new(file)
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("other")
             .to_string();
         *ext_counts.entry(ext).or_default() += 1;
     }
-    // Sort by count descending, then alphabetically
     let mut ext_list: Vec<(String, usize)> = ext_counts.into_iter().collect();
     ext_list.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     let breakdown: Vec<String> = ext_list
@@ -310,10 +499,37 @@ fn read_subdirs(dir: &Path, config: &TreeConfig) -> Vec<std::path::PathBuf> {
             }
             let name = e.file_name();
             let name_str = name.to_string_lossy();
-            if config.exclude_dirs.iter().any(|d| d == name_str.as_ref()) {
+            if config.exclude_dirs.iter().any(|p| matches_pattern(p, name_str.as_ref())) {
                 return None;
             }
             Some(path)
         })
         .collect()
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Relative path string from root to dir, using `/` separators. Root itself → `"."`.
+fn dir_rel(root: &Path, dir: &Path) -> String {
+    if dir == root {
+        ".".to_string()
+    } else {
+        dir.strip_prefix(root)
+            .map(|p| p.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_else(|_| dir.to_string_lossy().replace('\\', "/"))
+    }
+}
+
+/// Resolve the emoji icon for a filename based on its extension.
+fn icon_for_file(name: &str, config: &TreeConfig) -> String {
+    let ext = Path::new(name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| format!(".{}", e));
+    if let Some(ref ext) = ext {
+        if let Some(icon) = config.icons.by_ext.get(ext) {
+            return icon.clone();
+        }
+    }
+    config.icons.file.clone()
 }
