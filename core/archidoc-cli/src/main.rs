@@ -100,7 +100,7 @@ enum Commands {
     Init(InitFileArgs),
     /// Create a project from a folder template
     ///
-    /// Copies a named template tree from `.archidoc/templates/scaffold-folder-templates/<name>/`
+    /// Copies a named template tree from `.archidoc/templates/scaffold-templates/<name>/`
     /// to the target directory, substituting `{{variable}}` tokens in paths and file contents.
     ///
     /// Templates are discovered by walking up the directory tree — firm-level templates
@@ -115,7 +115,7 @@ enum Commands {
 
 #[derive(Args)]
 struct NewArgs {
-    /// Template name (folder name in scaffold-folder-templates/)
+    /// Template name (folder name in scaffold-templates/)
     name: Option<String>,
 
     /// Target directory (defaults to current directory)
@@ -677,7 +677,7 @@ fn run_new(args: NewArgs) {
         if templates.is_empty() {
             println!("no folder templates found.");
             println!();
-            println!("create templates in .archidoc/templates/scaffold-folder-templates/<name>/");
+            println!("create templates in .archidoc/scaffold-templates/<name>/");
             return;
         }
         println!("available folder templates:");

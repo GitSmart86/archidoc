@@ -36,7 +36,7 @@ archidoc init tree . --depth 3               # limit depth
 
 ### `archidoc scaffold <name> [--target dir] [--var k=v]` — Folder templates
 
-Copies a named template tree from `.archidoc/templates/scaffold-folder-templates/<name>/` with `{{variable}}` substitution.
+Copies a named template tree from `.archidoc/templates/scaffold-templates/<name>/` with `{{variable}}` substitution.
 
 ```bash
 archidoc scaffold --list                      # list templates
@@ -116,13 +116,13 @@ cargo install --path core/archidoc-cli  # install binary
 
 ## Template System
 
-### Init file templates
+### Init overrides (`.archidoc/init-overrides/`)
 
-Located in `.archidoc/templates/init-file-templates/`. Each file is a starting shape that an init handler populates from environment context. Custom templates override built-in defaults.
+Override the default output of built-in init handlers. Only files matching known handler output names are recognized: `_index.md`, `mod.rs`, `index.ts`, `architecture-table.md`. Unknown files are ignored.
 
-### Scaffold folder templates
+### Scaffold templates (`.archidoc/scaffold-templates/`)
 
-Located in `.archidoc/templates/scaffold-folder-templates/<name>/`. Each is a directory tree with a `.archidoc-template.toml` manifest defining variables and post-hooks. Walk-up discovery finds templates at any ancestor `.archidoc/` directory.
+User-authored folder templates. Each subdirectory is a template — the folder name becomes the template name. Requires a `.archidoc-template.toml` manifest. Walk-up discovery finds templates at any ancestor `.archidoc/` directory.
 
 ```toml
 [template]

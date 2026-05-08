@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 use super::types::{ScaffoldError, TemplateManifest};
 
 const MANIFEST_FILENAME: &str = ".archidoc-template.toml";
-const TEMPLATES_DIR: &str = "scaffold-folder-templates";
+const TEMPLATES_DIR: &str = "scaffold-templates";
 
 /// Walk up from `start_dir` to find a scaffold folder template by name.
 ///
-/// Searches `.archidoc/templates/scaffold-folder-templates/<name>/` at each
+/// Searches `.archidoc/scaffold-templates/<name>/` at each
 /// directory level, returning the first match. Nearest wins.
 pub fn discover_template(name: &str, start_dir: &Path) -> Result<PathBuf, ScaffoldError> {
     let mut cursor = if start_dir.is_absolute() {
@@ -21,7 +21,6 @@ pub fn discover_template(name: &str, start_dir: &Path) -> Result<PathBuf, Scaffo
     loop {
         let candidate = cursor
             .join(".archidoc")
-            .join("templates")
             .join(TEMPLATES_DIR)
             .join(name);
 
@@ -56,7 +55,6 @@ pub fn list_templates(
     loop {
         let templates_dir = cursor
             .join(".archidoc")
-            .join("templates")
             .join(TEMPLATES_DIR);
 
         if templates_dir.is_dir() {

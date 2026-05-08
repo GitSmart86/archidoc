@@ -60,11 +60,11 @@ fn walk(root: &Path, dir: &Path, missing: &mut Vec<PathBuf>) {
     }
 }
 
-/// Try to load a custom `_index.md` template from `.archidoc/custom/_index.md`
+/// Try to load a custom `_index.md` template from `.archidoc/init-overrides/_index.md`
 /// relative to the project root. Returns `None` if the file does not exist.
 fn load_custom_template(root: &Path) -> Option<String> {
-    let custom_path = root.join(".archidoc").join("custom").join("_index.md");
-    fs::read_to_string(custom_path).ok()
+    let path = root.join(".archidoc").join("init-overrides").join("_index.md");
+    fs::read_to_string(path).ok()
 }
 
 /// Count columns in a markdown table header line.

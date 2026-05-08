@@ -1,31 +1,39 @@
 use std::fs;
 use std::path::Path;
 
-/// Template overrides loaded from `.archidoc/custom/`.
+/// Template overrides loaded from `.archidoc/init-overrides/`.
 ///
 /// Each field is `Some(content)` if the override file exists, `None` if absent —
 /// callers fall back to hardcoded defaults when `None`.
+///
+/// Only files matching known handler output names are recognized:
+/// - `mod.rs` — overrides the Rust @c4 annotation template
+/// - `index.ts` — overrides the TypeScript @c4 annotation template
+/// - `_index.md` — overrides the _index.md directory listing template
+/// - `architecture-table.md` — overrides the architecture summary table header
+///
+/// Unknown files in this directory are ignored.
 ///
 /// | File | Pattern | Purpose | Health |
 /// |------|---------|---------|--------|
 /// | `custom.rs` | -- | Template loading and token substitution | stable |
 pub struct CustomTemplates {
-    /// Rust suggest template — `.archidoc/custom/mod.rs`
+    /// Rust suggest template — `.archidoc/init-overrides/mod.rs`
     pub suggest_rust: Option<String>,
-    /// TypeScript suggest template — `.archidoc/custom/index.ts`
+    /// TypeScript suggest template — `.archidoc/init-overrides/index.ts`
     pub suggest_ts: Option<String>,
-    /// Markdown suggest template — `.archidoc/custom/_index.md`
+    /// Markdown suggest template — `.archidoc/init-overrides/_index.md`
     pub suggest_md: Option<String>,
-    /// Architecture summary table header — `.archidoc/custom/architecture-table.md`
+    /// Architecture summary table header — `.archidoc/init-overrides/architecture-table.md`
     pub architecture_table: Option<String>,
 }
 
 impl CustomTemplates {
-    /// Load custom templates from `.archidoc/custom/` relative to `cwd`.
+    /// Load custom templates from `.archidoc/init-overrides/` relative to `cwd`.
     ///
     /// Missing files are silently ignored — `None` means "use hardcoded default".
     pub fn load(cwd: &Path) -> Self {
-        let base = cwd.join(".archidoc").join("custom");
+        let base = cwd.join(".archidoc").join("init-overrides");
         Self {
             suggest_rust: read_optional(&base.join("mod.rs")),
             suggest_ts: read_optional(&base.join("index.ts")),
