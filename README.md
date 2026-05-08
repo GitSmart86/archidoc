@@ -9,9 +9,6 @@ archidoc pulls your architecture — module boundaries, dependency edges, and Go
 
 ## What It Does
 
-Archidoc gives AI and humans high-level intent, mid-level structure, and links to details all in one enforcible file.
-Archidoc pulls your architecture — module boundaries, dependency edges, and GoF pattern contracts — straight from comments in your code, turns them into docs and LLM context, and fails your CI build if they fall out of sync.
-
 Developers annotate module entry files (`mod.rs`, `index.ts`, `__init__.py`) with structured comments containing C4 markers, GoF pattern labels, and file-level responsibility tables. archidoc compiles these annotations into a single **ARCHITECTURE.md** containing:
 
 - **Inline Mermaid C4 diagrams** (container and component levels)
@@ -32,10 +29,6 @@ cargo install archidoc-cli
 
 # Or from source
 cargo install --path core/archidoc-cli
-
-# Or build locally
-cargo build --release
-# Binary at target/release/archidoc
 ```
 
 ```bash
@@ -43,14 +36,18 @@ cargo build --release
 npm install archidoc-ts
 ```
 
-## Usage
+## Command Reference
 
-```bash
-# Print full usage reference (all commands and options)
-archidoc info
-archidoc --help
-archidoc -h
-```
+archidoc has two subcommands plus validation flags:
+
+| Command | Purpose |
+|---------|---------|
+| `archidoc .` | Compile annotations → ARCHITECTURE.md + ARCHITECTURE.ai.md |
+| `archidoc init <handler> [dir]` | Generate a file from environment context |
+| `archidoc scaffold <template> [--target dir] [--var k=v]` | Create a project from a folder template |
+| `archidoc --check .` | CI gate: exit 1 if docs are stale |
+| `archidoc --validate .` | Detect ghost/orphan files in file tables |
+| `archidoc --health .` | Report architecture health (maturity, pattern confidence) |
 
 ### Generate architecture docs
 
@@ -79,34 +76,76 @@ archidoc --health .
 
 # Validate file tables (ghost/orphan detection)
 archidoc --validate .
+
+# All validation commands support --json for machine-readable output
+archidoc --check . --json
+archidoc --health . --json
+archidoc --validate . --json
 ```
 
-### Directory tree generation
+### Init — generate files from environment context
+
+The `init` command reads a target directory and generates files based on the named handler. Each handler knows how to read the environment and produce context-aware output.
 
 ```bash
-# AI-optimized dirs-only tree  → _context/ARCHITECTURE.ai.tree.md
-archidoc tree .
-
-# AI-optimized dirs+files tree → _context/ARCHITECTURE.ai.files.md
-archidoc tree . --files
-
-# Both AI variants in one pass
-archidoc tree . --both
-
-# Human-readable tree with icons → _context/ARCHITECTURE.tree.md
-archidoc tree . --human
-
-# All three files in one pass
-archidoc tree . --both --human
-
-# Limit depth (useful for CLAUDE.md snippets)
-archidoc tree . --depth 3
-
-# Custom output directory
-archidoc tree . --both --out docs/
+# List available init handlers
+archidoc init --list
 ```
 
-**Output files:**
+**Available handlers:**
+
+| Handler | What It Does | Example |
+|---------|-------------|---------|
+| `_index.md` | Generate `_index.md` stubs for all dirs missing one | `archidoc init _index.md ./src/` |
+| `_index.md --dry-run` | List dirs missing `_index.md` without creating | `archidoc init _index.md ./src/ --dry-run` |
+| `c4-annotation` | Generate @c4 annotation template for a directory | `archidoc init c4-annotation ./src/api/` |
+| `root-annotation` | Generate root-level lib.rs/index.ts template | `archidoc init root-annotation .` |
+| `tree` | Generate token-optimized directory tree | `archidoc init tree .` |
+
+**Examples:**
+
+```bash
+# Generate _index.md for all directories missing one (idempotent)
+archidoc init _index.md ./src/
+
+# Just list what's missing without creating files
+archidoc init _index.md ./src/ --dry-run
+
+# Generate @c4 annotation template for a module directory
+archidoc init c4-annotation ./src/api/
+
+# Scaffold root-level lib.rs / index.ts template with TODO sections
+archidoc init root-annotation .
+archidoc init root-annotation . --lang rust
+archidoc init root-annotation . --lang ts
+```
+
+**Directory tree generation:**
+
+```bash
+# AI-optimized dirs-only tree → _context/ARCHITECTURE.ai.tree.md
+archidoc init tree .
+
+# AI-optimized dirs+files tree → _context/ARCHITECTURE.ai.files.md
+archidoc init tree . --files
+
+# Both AI variants in one pass
+archidoc init tree . --both
+
+# Human-readable tree with icons → _context/ARCHITECTURE.tree.md
+archidoc init tree . --human
+
+# All three files in one pass
+archidoc init tree . --both --human
+
+# Limit depth (useful for CLAUDE.md snippets)
+archidoc init tree . --depth 3
+
+# Custom output directory
+archidoc init tree . --both --out docs/
+```
+
+**Tree output files:**
 
 | File | Format | Best for |
 |------|--------|----------|
@@ -114,13 +153,7 @@ archidoc tree . --both --out docs/
 | `ARCHITECTURE.ai.files.md` | Compact dirs+files, adaptive inline/count, sibling-collapse | AI file lookup |
 | `ARCHITECTURE.tree.md` | Indented bullets with emoji icons | Human browsing |
 
-**Sibling-collapse** — when 3+ sibling dirs share an identical file set and no nested subdirs, the AI files tree collapses them to one line:
-
-```
-engine-specs/{act, cm, comm, dmn, eml, im, int, log}/ [each: axis-card.json, meta.json, module-doc.md]
-```
-
-**Config** — create `.archidoc/config.tree.json` at your project root to customize exclusions, extensions, threshold, and icons:
+**Tree config** — create `.archidoc/config.tree.json` at your project root:
 
 ```json
 {
@@ -131,54 +164,75 @@ engine-specs/{act, cm, comm, dmn, eml, im, int, log}/ [each: axis-card.json, met
   "icons": {
     "directory": "📁",
     "file": "📄",
-    "by_ext": {
-      ".md": "📖",
-      ".rs": "🔷",
-      ".ts": "🟦",
-      ".json": "⚙️",
-      ".toml": "⚙️",
-      ".py": "🐍",
-      ".sh": "📜"
-    }
+    "by_ext": { ".md": "📖", ".rs": "🔷", ".ts": "🟦" }
   }
 }
 ```
 
-- `exclude_dirs` / `exclude_files` are **additive** (merged with built-in defaults).
-  Supports glob patterns: `*.jsonl`, `__pycache__`, `tmp*`.
-- `include_extensions` **replaces** the default extension list if non-empty.
-- `icons` entries **override** defaults; omitted keys keep their defaults.
+### Scaffold — create projects from folder templates
 
-### Scaffold and audit
+The `scaffold` command copies a named template tree from `.archidoc/templates/scaffold-folder-templates/<name>/` to the target directory, substituting `{{variable}}` tokens in paths and file contents. Templates are discovered by walking up the directory tree — firm-level templates at a workspace root are available from any subdirectory.
 
 ```bash
-# Report all directories missing an _index.md (dry run)
-archidoc audit .
+# List available folder templates
+archidoc scaffold --list
 
-# Create stub _index.md files for every dir missing one (idempotent)
-archidoc scaffold .
+# Inspect a template (show variables, description, post-hooks)
+archidoc scaffold client --inspect
 
-# Find all stubs still needing real content
-grep -rl "TODO: archidoc" . --include="_index.md"
+# Preview what would be created without writing
+archidoc scaffold client --dry-run --var client_name=Acme --var engagement_id=2026-001
+
+# Create from template
+archidoc scaffold client --target ./clients/Acme \
+  --var client_name=Acme \
+  --var engagement_id=2026-001-migration \
+  --var engagement_name="Data Migration" \
+  --var date=2026-05-08
+
+# Overwrite existing files
+archidoc scaffold client --target ./clients/Acme --force --var ...
 ```
 
-Stubs are intentionally invisible to the archidoc walker — they omit the `@c4` annotation. Add the annotation when you fill in the description.
+**Creating your own templates:**
 
-### Annotation scaffolding
+1. Create a directory under `.archidoc/templates/scaffold-folder-templates/<name>/`
+2. Add a `.archidoc-template.toml` manifest:
 
-```bash
-# Scaffold root-level lib.rs / index.ts template
-archidoc init
-archidoc init --lang rust
-archidoc init --lang ts
+```toml
+[template]
+name = "my-template"
+description = "What this template creates"
+version = "0.1.0"
 
-# Generate annotation template for a module directory
-archidoc suggest src/api/
-archidoc suggest src/api/ >> src/api/mod.rs
+[[variables]]
+name = "project_name"
+description = "Name of the project"
+required = true
 
-# Copy default templates to .archidoc/custom/ for editing
-archidoc templates
+[[variables]]
+name = "author"
+description = "Project author"
+required = false
+default = "Team"
+
+[[post_hooks]]
+command = "npm install"
+description = "Install dependencies after scaffolding"
 ```
+
+3. Add template files using `{{variable_name}}` in file contents and directory names:
+
+```
+my-template/
+├── .archidoc-template.toml
+├── {{project_name}}/
+│   ├── README.md           ← contents can use {{project_name}}, {{author}}
+│   └── src/
+│       └── main.rs
+```
+
+4. Run: `archidoc scaffold my-template --target ./output --var project_name=hello`
 
 ### JSON IR (polyglot pipelines)
 
@@ -257,11 +311,11 @@ Pattern labels have two tiers:
 
 ### Greenfield (new project)
 
-1. **Scaffold the root template** — generates a `lib.rs` / `index.ts` doc comment with TODO sections for purpose, C4 context, data flow, concurrency patterns, deployment, and external dependencies:
+1. **Scaffold the root template**:
 
    ```bash
-   archidoc init                   # auto-detects Rust/TS from Cargo.toml or package.json
-   archidoc init --lang rust       # explicit
+   archidoc init root-annotation .     # auto-detects Rust/TS
+   archidoc init root-annotation . --lang rust   # explicit
    ```
 
    Paste the output into your root entry file (`lib.rs` or `index.ts`) and fill in the TODOs.
@@ -269,8 +323,8 @@ Pattern labels have two tiers:
 2. **Add module annotations** — as you create modules, scaffold their annotations:
 
    ```bash
-   archidoc suggest src/api/       # generates a @c4 container/component template
-   archidoc suggest src/api/ >> src/api/mod.rs
+   archidoc init c4-annotation src/api/       # prints a @c4 template to stdout
+   archidoc init c4-annotation src/api/ >> src/api/mod.rs
    ```
 
 3. **Generate docs**:
@@ -283,23 +337,15 @@ Pattern labels have two tiers:
 
 ### Brownfield (existing project)
 
-1. **Pick your top-level modules** — identify the 3-5 directories that represent your system's major containers (e.g. `api/`, `core/`, `database/`)
+1. **Pick your top-level modules** — identify the 3-5 directories that represent your system's major containers
 
 2. **Scaffold annotations** for each module:
 
    ```bash
-   archidoc suggest src/api/       # prints a ready-to-paste annotation block
+   archidoc init c4-annotation src/api/       # prints a ready-to-paste annotation block
    ```
 
-3. **Add a C4 marker** to each module's entry file (`mod.rs`, `index.ts`, or `__init__.py`):
-
-   ```rust
-   //! @c4 container
-   //!
-   //! # Api
-   //!
-   //! REST API gateway — handles authentication and request routing.
-   ```
+3. **Add a C4 marker** to each module's entry file (`mod.rs`, `index.ts`, or `__init__.py`)
 
 4. **Run archidoc** to generate your first diagrams:
 
@@ -307,10 +353,10 @@ Pattern labels have two tiers:
    archidoc .
    ```
 
-5. **Optionally scaffold the root** — if you want data flow, concurrency, and deployment sections in your docs:
+5. **Optionally scaffold the root**:
 
    ```bash
-   archidoc init >> src/lib.rs     # append the template, then fill in the TODOs
+   archidoc init root-annotation . >> src/lib.rs
    ```
 
 6. **Add relationships** between containers:
@@ -325,7 +371,7 @@ Pattern labels have two tiers:
    archidoc --check .
    ```
 
-Start with containers only. Add components, file tables, and relationships as the architecture stabilizes. See [Annotating Your Project](docs/annotating-your-project.md) for the full step-by-step guide.
+Start with containers only. Add components, file tables, and relationships as the architecture stabilizes. See [Annotating Your Project](docs/annotating-your-project.md) for the full guide.
 
 ## Project Structure
 
@@ -333,14 +379,14 @@ Start with containers only. Add components, file tables, and relationships as th
 Cargo.toml              Workspace root
 core/
   archidoc-types/       Shared types (ModuleDoc, C4Level, FileEntry, Relationship, etc.)
-  archidoc-engine/      Language-agnostic generator (ARCHITECTURE.md, ai context, mermaid, plantuml, draw.io, IR, drift, health)
+  archidoc-engine/      Language-agnostic generator + init handlers + scaffold engine
   archidoc-cli/         CLI binary: archidoc
   spec/                 JSON IR schema
-  tests/                BDD test infrastructure (DSL, protocol drivers, fakes)
+  tests/                BDD test infrastructure
 adapters/
   archidoc-rust/        Rust adapter (//! doc comments -> ModuleDoc)
   archidoc-ts/          TypeScript adapter (@c4 JSDoc -> JSON IR)
-docs/                   Guides (annotation spec, getting started, LLM context)
+docs/                   Guides (annotation spec, LLM context, getting started)
 examples/               Example annotated projects
 ```
 
@@ -350,24 +396,13 @@ archidoc follows a three-layer architecture:
 
 1. **Types** (`archidoc-types`) — shared domain model: `ModuleDoc`, `C4Level`, `FileEntry`, `Relationship`, `PatternStatus`, `HealthStatus`
 2. **Adapters** (`archidoc-rust`, `archidoc-ts`) — language-specific parsers that extract annotations and emit `ModuleDoc` arrays
-3. **Engine** (`archidoc-engine`) — language-agnostic generators that consume `ModuleDoc` and produce ARCHITECTURE.md, diagrams, IR, drift reports, and health summaries
+3. **Engine** (`archidoc-engine`) — language-agnostic generators, init handlers, and scaffold engine
 
 The CLI orchestrates: adapter parses source -> engine generates ARCHITECTURE.md.
 
 ### JSON IR
 
 The intermediate representation (`ModuleDoc[]` as JSON) is the contract between adapters and the engine. Any language adapter that emits conforming JSON can use the full engine pipeline. See `core/spec/archidoc-ir-schema.json` for the schema.
-
-## Writing a Language Adapter
-
-To add support for a new language:
-
-1. Scaffold with `archidoc init-adapter --lang python`
-2. Implement a parser that extracts annotations from your language's comment format
-3. Implement a walker that traverses source directories and collects `ModuleDoc` entries
-4. Emit `ModuleDoc[]` JSON to stdout — the engine handles the rest
-
-See the `archidoc-rust` and `archidoc-ts` adapters for reference implementations.
 
 ## Tests
 
@@ -378,8 +413,6 @@ cargo test
 # Run TypeScript adapter tests
 cd adapters/archidoc-ts && npm test
 ```
-
-The test suite uses Dave Farley-style BDD: declarative test cases specify WHAT (behavior), protocol drivers translate to HOW (implementation). When the implementation changes, update drivers — not tests.
 
 ## License
 

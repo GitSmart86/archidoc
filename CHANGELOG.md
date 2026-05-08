@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-05-08
+
+### Added
+
+- **`archidoc scaffold` command** — creates projects from folder templates. Copies named template trees from `.archidoc/templates/scaffold-folder-templates/<name>/` with `{{variable}}` substitution in paths and file contents. Supports `--list`, `--inspect`, `--dry-run`, `--force`, `--var key=value`, and `--target <path>`. Walk-up directory discovery finds firm-level templates from any subdirectory.
+- **`.archidoc-template.toml` manifest** — defines template name, description, version, required/optional variables with defaults, and post-scaffold hooks.
+- **`archidoc init` command** — unified handler-based file generation from environment context. Replaces `suggest`, `init` (old), `scaffold` (old stubs), `audit`, and `tree` commands with a single dispatch surface. Use `archidoc init --list` to see available handlers.
+- **Init handlers**: `_index.md` (directory listing stubs with `--dry-run`), `c4-annotation` (module annotation templates), `root-annotation` (root-level lib.rs/index.ts templates), `tree` (directory tree with `--files`, `--human`, `--both`, `--depth` flags).
+- **CLAUDE.md** — project context file for AI assistants with complete command reference.
+- **`folder_scaffold` engine module** — template discovery, variable collection/validation, plan builder, execution engine with post-hook runner.
+- **`init_cmd` engine module** — `InitHandler` trait, handler registry, and dispatch.
+
+### Changed
+
+- **CLI surface simplified** — collapsed 10 subcommands into 2 (`init` + `scaffold`) plus validation flags. All template operations now use one of two commands: `scaffold` for folder templates, `init` for context-aware file generation.
+
+### Removed
+
+- `archidoc suggest` — use `archidoc init c4-annotation <dir>` instead
+- `archidoc init` (old root scaffold) — use `archidoc init root-annotation .` instead
+- `archidoc scaffold` (old stubs) — use `archidoc init _index.md <dir>` instead
+- `archidoc audit` — use `archidoc init _index.md <dir> --dry-run` instead
+- `archidoc tree` — use `archidoc init tree .` instead
+- `archidoc templates` — edit files directly in `.archidoc/templates/init-file-templates/`
+- `archidoc init-adapter` — will be replaced by `archidoc scaffold adapter` template
+- `archidoc info` — use `archidoc --help` instead
+
 ## [0.3.2] - 2026-02-21
 
 ### Added

@@ -2,6 +2,65 @@
 
 A structured reference for AI coding assistants to annotate any project with archidoc-compatible C4 architecture documentation.
 
+## Quick Reference — Commands
+
+archidoc has two subcommands (`init` and `scaffold`) plus validation flags.
+
+### `archidoc .` — Generate architecture docs
+
+Compiles `@c4` annotations from source code into `ARCHITECTURE.md` + `ARCHITECTURE.ai.md`.
+
+```bash
+archidoc .                          # generate from source annotations
+archidoc . -o docs/ARCHITECTURE.md  # custom output path
+archidoc . --no-ai                  # skip ARCHITECTURE.ai.md
+archidoc . --plantuml --drawio      # also generate sidecar diagrams
+```
+
+### `archidoc init <handler> [dir]` — Generate files from context
+
+Reads the target directory and generates files using the named handler.
+
+```bash
+archidoc init --list                           # list all handlers
+
+archidoc init _index.md ./src/                 # generate _index.md stubs for dirs missing one
+archidoc init _index.md ./src/ --dry-run       # just list missing dirs
+
+archidoc init c4-annotation ./src/api/         # generate @c4 annotation block (stdout)
+archidoc init c4-annotation ./src/api/ >> src/api/mod.rs  # append to entry file
+
+archidoc init root-annotation .                # generate root-level template (stdout)
+archidoc init root-annotation . --lang rust    # explicit language
+archidoc init root-annotation . --lang ts
+
+archidoc init tree .                           # AI dir tree → _context/ARCHITECTURE.ai.tree.md
+archidoc init tree . --files                   # AI dir+files tree
+archidoc init tree . --human                   # human-readable tree with icons
+archidoc init tree . --both --human            # all three variants
+archidoc init tree . --depth 3                 # limit depth
+```
+
+### `archidoc scaffold <name> [--target dir] [--var k=v]` — Folder templates
+
+Copies a named template tree with `{{variable}}` substitution.
+
+```bash
+archidoc scaffold --list                       # list available templates
+archidoc scaffold <name> --inspect             # show vars and description
+archidoc scaffold <name> --dry-run --var ...   # preview without creating
+archidoc scaffold <name> --target ./dir --var key=value
+```
+
+### Validation (CI gates)
+
+```bash
+archidoc --check .                             # exit 1 if docs are stale
+archidoc --validate .                          # detect ghost/orphan files
+archidoc --health .                            # report maturity and patterns
+archidoc --emit-ir .                           # export JSON IR to stdout
+```
+
 ## ARCHITECTURE.ai.md — Token-Optimized Context
 
 archidoc generates `ARCHITECTURE.ai.md` alongside `ARCHITECTURE.md` by default. This file is designed for LLM consumption:
@@ -79,14 +138,8 @@ Mark each module as a C4 container or component.
 
 Declare runtime dependencies between modules.
 
-**Rust**:
 ```rust
 //! @c4 uses target_module "description of data flow" "protocol or technology"
-```
-
-**TypeScript**:
-```typescript
-/** @c4 uses target_module "description of data flow" "protocol or technology" */
 ```
 
 - `target_module`: dot-notation module path of the dependency
@@ -120,14 +173,7 @@ src/bus/calc/mod.rs      -> bus.calc
 lib.rs                   -> _lib
 ```
 
-### Parent Container Derivation
-
-The first segment of a dot-notation path is the parent container:
-- `api.auth` -> parent is `api`
-- `bus.calc.indicators` -> parent is `bus`
-- `api` -> no parent (top-level container)
-
-## Step-by-Step Instructions
+## Step-by-Step Instructions for LLMs
 
 Given a codebase to annotate:
 
@@ -167,32 +213,28 @@ archidoc --check .       # Check for documentation drift
 archidoc --health .      # View architecture health summary
 ```
 
-## Scaffolding Commands
+## Scaffolding Workflow for LLMs
 
-archidoc provides two scaffolding commands to bootstrap annotations:
-
-### `archidoc init` — Root-level template
-
-Generates a project-level `lib.rs` / `index.ts` doc comment with sections for purpose, C4 context diagram, data flow, concurrency patterns, deployment, and external dependencies. Each section has TODO placeholders.
+When annotating a new project, use these commands to bootstrap:
 
 ```bash
-archidoc init              # auto-detects language from Cargo.toml / package.json
-archidoc init --lang rust  # explicit Rust
-archidoc init --lang ts    # explicit TypeScript
+# 1. Generate root-level template (paste into lib.rs / index.ts)
+archidoc init root-annotation .
+
+# 2. For each module directory, generate an annotation template
+archidoc init c4-annotation src/api/
+archidoc init c4-annotation src/database/
+
+# 3. Generate _index.md for all directories
+archidoc init _index.md .
+
+# 4. Compile and validate
+archidoc .
+archidoc --check .
+archidoc --validate .
 ```
 
-The C4 Context mermaid diagram in the template renders in `ARCHITECTURE.md` but is automatically stripped from `ARCHITECTURE.ai.md` (code blocks are excluded from the AI format).
-
-### `archidoc suggest <dir>` — Module-level template
-
-Generates a `@c4 container` or `@c4 component` annotation (auto-detected from directory depth) with a file table listing all source files in the directory.
-
-```bash
-archidoc suggest src/api/                    # prints to stdout
-archidoc suggest src/api/ >> src/api/mod.rs  # append to entry file
-```
-
-## Template
+## Templates
 
 ### Rust Container Template
 

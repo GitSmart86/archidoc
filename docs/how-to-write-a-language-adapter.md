@@ -39,7 +39,7 @@ Each `ModuleDoc` represents one architectural element (a C4 container or compone
 | `c4_level` | `"container"` \| `"component"` \| `"unknown"` | C4 architecture level |
 | `pattern` | string | GoF design pattern name, or `"--"` if none |
 | `pattern_status` | `"planned"` \| `"verified"` | Whether the pattern is structurally confirmed |
-| `description` | string | First paragraph after the C4 marker |
+| `description` | string | Summary line after the C4 marker (first non-empty, non-marker line) |
 | `parent_container` | string \| null | Module path of the parent container, null for top-level |
 | `relationships` | array | Dependencies declared via `@c4 uses` markers |
 | `files` | array | File catalog entries from the module's file table |
@@ -106,7 +106,7 @@ def walk_modules(root):
         parts = module_path.split(".")
         parent = ".".join(parts[:-1]) if len(parts) > 1 else None
 
-        # Extract description (first non-marker paragraph)
+        # Extract description (first non-marker summary line)
         lines = content.strip().split("\n")
         description = ""
         for line in lines:

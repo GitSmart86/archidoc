@@ -84,92 +84,117 @@ struct GlobalOpts {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Initialize a new language adapter scaffold
-    InitAdapter {
-        /// Language name for the adapter (e.g., python, go, java)
-        #[arg(long)]
-        lang: String,
-    },
-    /// Generate annotation template for a directory
-    Suggest {
-        /// Path to directory to generate annotation for
-        path: PathBuf,
-    },
-    /// Generate root-level lib.rs/index.ts template with architectural sections
-    Init {
-        /// Language for comment syntax (auto-detected from Cargo.toml/package.json if omitted)
-        #[arg(long)]
-        lang: Option<String>,
-    },
-    /// Scaffold .archidoc/custom/ with editable default templates
+    /// Generate a file from environment context
     ///
-    /// Creates .archidoc/custom/{mod.rs,index.ts,_index.md,architecture-table.md}
-    /// so you can customize suggest and summary table output.
-    /// Existing files are never overwritten. Delete a file to revert to the built-in default.
-    Templates,
-    /// Print detailed usage reference for all commands and options
+    /// Reads the target directory, applies the named handler, and writes output.
+    /// Each handler reads project state and produces one or more files.
     ///
-    /// Equivalent to `archidoc --help` but always shows the long-form reference.
-    /// Aliases: `archidoc help`, `archidoc --help`, `archidoc -h`
-    Info,
-    /// Generate a token-optimized directory tree
+    /// Examples:
+    ///   archidoc init _index.md ./src/              # generate _index.md for all dirs missing one
+    ///   archidoc init _index.md ./src/ --dry-run    # list missing dirs (was: audit)
+    ///   archidoc init c4-annotation ./src/api/      # generate @c4 stub (was: suggest)
+    ///   archidoc init root-annotation .             # generate root template
+    ///   archidoc init tree .                        # generate dir tree (was: tree)
+    ///   archidoc init tree . --files --human        # tree variants
+    ///   archidoc init --list                        # list available handlers
+    Init(InitFileArgs),
+    /// Create a project from a folder template
     ///
-    /// AI variants (default):
-    ///   archidoc tree .              → _context/ARCHITECTURE.ai.tree.md  (dirs only, brace-expanded)
-    ///   archidoc tree . --files      → _context/ARCHITECTURE.ai.files.md (dirs + files, adaptive)
-    ///   archidoc tree . --both       → generates both AI variants in one pass
+    /// Copies a named template tree from `.archidoc/templates/scaffold-folder-templates/<name>/`
+    /// to the target directory, substituting `{{variable}}` tokens in paths and file contents.
     ///
-    /// Human variant:
-    ///   archidoc tree . --human      → _context/ARCHITECTURE.tree.md (indented bullets + icons)
+    /// Templates are discovered by walking up the directory tree — firm-level templates
+    /// at a workspace root are available from any subdirectory.
     ///
-    /// Combine freely: --both --human generates all three files in one pass.
-    /// Use --depth N to limit traversal depth (e.g. --depth 2 for a CLAUDE.md snippet).
-    /// Exclusions and icons are configured in .archidoc/config.tree.json.
-    Tree {
-        /// Path to project root (defaults to current directory)
-        path: Option<PathBuf>,
+    /// Examples:
+    ///   archidoc scaffold client --target ./clients/Acme --var client_name=Acme --var engagement_id=2026-001
+    ///   archidoc scaffold --list
+    ///   archidoc scaffold client --dry-run --var client_name=Test
+    Scaffold(NewArgs),
+}
 
-        /// Include files under each directory (outputs ARCHITECTURE.ai.files.md)
-        #[arg(long)]
-        files: bool,
+#[derive(Args)]
+struct NewArgs {
+    /// Template name (folder name in scaffold-folder-templates/)
+    name: Option<String>,
 
-        /// Generate both AI dirs-only and dirs+files variants in one pass
-        #[arg(long, conflicts_with = "files")]
-        both: bool,
+    /// Target directory (defaults to current directory)
+    #[arg(long, short = 't')]
+    target: Option<PathBuf>,
 
-        /// Generate human-readable indented tree with icons (outputs ARCHITECTURE.tree.md)
-        #[arg(long)]
-        human: bool,
+    /// Variable assignment (repeatable): --var key=value
+    #[arg(long = "var", value_parser = parse_key_value)]
+    vars: Vec<(String, String)>,
 
-        /// Maximum traversal depth (unlimited if omitted)
-        #[arg(long)]
-        depth: Option<usize>,
+    /// List available folder templates
+    #[arg(long, conflicts_with_all = ["name", "inspect", "dry_run"])]
+    list: bool,
 
-        /// Output directory (defaults to _context/)
-        #[arg(long, default_value = "_context")]
-        out: PathBuf,
-    },
-    /// Report all directories missing an _index.md annotation file (dry run)
-    ///
-    /// Walks the directory tree skipping node_modules, .git, _archive, _context,
-    /// and other non-content directories. Prints a sorted list of paths and a
-    /// summary count. Use `archidoc scaffold` to create stubs for all missing dirs.
-    Audit {
-        /// Path to project root (defaults to current directory)
-        path: Option<PathBuf>,
-    },
-    /// Create stub _index.md files for all directories missing one
-    ///
-    /// Each stub contains a `TODO: archidoc` marker and is intentionally missing
-    /// the @c4 annotation, so the archidoc-md walker ignores it until filled.
-    /// Idempotent — existing files are never overwritten.
-    ///
-    /// Find all stubs needing content:
-    ///   grep -rl "TODO: archidoc" . --include="_index.md"
-    Scaffold {
-        /// Path to project root (defaults to current directory)
-        path: Option<PathBuf>,
-    },
+    /// Show template metadata and required variables
+    #[arg(long)]
+    inspect: bool,
+
+    /// Show what would be created without writing anything
+    #[arg(long)]
+    dry_run: bool,
+
+    /// Overwrite existing files
+    #[arg(long)]
+    force: bool,
+}
+
+#[derive(Args)]
+struct InitFileArgs {
+    /// Handler name (e.g., _index.md, c4-annotation, root-annotation, tree)
+    name: Option<String>,
+
+    /// Target directory (defaults to current directory)
+    target: Option<PathBuf>,
+
+    /// List available init handlers
+    #[arg(long)]
+    list: bool,
+
+    /// Show what would be generated without writing
+    #[arg(long)]
+    dry_run: bool,
+
+    /// Variable assignment (repeatable): --var key=value
+    #[arg(long = "var", value_parser = parse_key_value)]
+    vars: Vec<(String, String)>,
+
+    // -- Handler-specific flags (passed through to handlers) --
+
+    /// Include files in tree output (tree handler)
+    #[arg(long)]
+    files: bool,
+
+    /// Generate human-readable tree with icons (tree handler)
+    #[arg(long)]
+    human: bool,
+
+    /// Generate both AI dir and dir+files tree variants (tree handler)
+    #[arg(long)]
+    both: bool,
+
+    /// Maximum traversal depth (tree handler)
+    #[arg(long)]
+    depth: Option<usize>,
+
+    /// Language for comment syntax: rust, ts (root-annotation handler)
+    #[arg(long)]
+    lang: Option<String>,
+
+    /// Output directory for generated files (tree handler, defaults to _context/)
+    #[arg(long)]
+    out: Option<PathBuf>,
+}
+
+fn parse_key_value(s: &str) -> Result<(String, String), String> {
+    let pos = s
+        .find('=')
+        .ok_or_else(|| format!("invalid KEY=value: no '=' found in '{s}'"))?;
+    Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
 }
 
 fn main() {
@@ -178,37 +203,12 @@ fn main() {
     // Handle subcommands first
     if let Some(command) = cli.command {
         match command {
-            Commands::InitAdapter { lang } => {
-                run_init_adapter(&lang);
+            Commands::Init(args) => {
+                run_init_file(args);
                 return;
             }
-            Commands::Suggest { path } => {
-                run_suggest(&path);
-                return;
-            }
-            Commands::Init { lang } => {
-                run_init(&cli.path, lang.as_deref());
-                return;
-            }
-            Commands::Templates => {
-                run_templates(&cli.path);
-                return;
-            }
-            Commands::Info => {
-                use clap::CommandFactory;
-                Cli::command().print_long_help().unwrap();
-                return;
-            }
-            Commands::Tree { path, files, both, human, depth, out } => {
-                run_tree(path.as_deref(), files, both, human, depth, &out);
-                return;
-            }
-            Commands::Audit { path } => {
-                run_audit(path.as_deref());
-                return;
-            }
-            Commands::Scaffold { path } => {
-                run_scaffold(path.as_deref());
+            Commands::Scaffold(args) => {
+                run_new(args);
                 return;
             }
         }
@@ -538,246 +538,345 @@ fn run_validate_ir(json: &str) {
     }
 }
 
-fn run_suggest(path: &PathBuf) {
-    if !path.exists() {
-        eprintln!("error: path does not exist: {}", path.display());
-        std::process::exit(1);
-    }
-    if !path.is_dir() {
-        eprintln!("error: path is not a directory: {}", path.display());
-        std::process::exit(1);
-    }
-    let cwd = std::env::current_dir().expect("failed to get current directory");
-    let custom = archidoc_engine::custom::CustomTemplates::load(&cwd);
-    let annotation = archidoc_engine::suggest::suggest_annotation(path, custom.suggest_rust.as_deref());
-    print!("{}", annotation);
-}
+fn run_init_file(args: InitFileArgs) {
+    use archidoc_engine::init_cmd;
 
-fn run_init(path: &Option<PathBuf>, lang: Option<&str>) {
-    use archidoc_engine::init::{CommentStyle, wrap_jsdoc};
-
-    let root = path
-        .clone()
-        .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
-
-    let style = if let Some(lang) = lang {
-        CommentStyle::from_lang(lang).unwrap_or_else(|| {
-            eprintln!("error: unsupported language '{}' (try: rust, ts)", lang);
-            std::process::exit(1);
-        })
-    } else {
-        CommentStyle::detect(&root).unwrap_or_else(|| {
-            eprintln!("error: could not detect language (no Cargo.toml or package.json)");
-            eprintln!("hint: use --lang rust or --lang ts");
-            std::process::exit(1);
-        })
-    };
-
-    let template = archidoc_engine::init::generate_template(style);
-
-    match style {
-        CommentStyle::TypeScript => print!("{}", wrap_jsdoc(&template)),
-        _ => print!("{}", template),
-    }
-}
-
-fn run_templates(path: &Option<PathBuf>) {
-    use archidoc_engine::custom::{
-        DEFAULT_ARCHITECTURE_TABLE, DEFAULT_SUGGEST_MD, DEFAULT_SUGGEST_RUST, DEFAULT_SUGGEST_TS,
-    };
-
-    let root = path
-        .clone()
-        .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
-
-    let custom_dir = root.join(".archidoc").join("custom");
-    fs::create_dir_all(&custom_dir).expect("failed to create .archidoc/custom/");
-
-    let scaffolds: &[(&str, &str)] = &[
-        ("mod.rs", DEFAULT_SUGGEST_RUST),
-        ("index.ts", DEFAULT_SUGGEST_TS),
-        ("_index.md", DEFAULT_SUGGEST_MD),
-        ("architecture-table.md", DEFAULT_ARCHITECTURE_TABLE),
-    ];
-
-    let mut created = Vec::new();
-    let mut skipped = Vec::new();
-    for (filename, content) in scaffolds {
-        let dest = custom_dir.join(filename);
-        if dest.exists() {
-            skipped.push(filename.to_string());
-        } else {
-            fs::write(&dest, content).unwrap_or_else(|e| {
-                eprintln!("warning: failed to write {}: {}", dest.display(), e);
-            });
-            created.push(filename.to_string());
+    if args.list {
+        let handlers = init_cmd::all_handlers();
+        println!("available init handlers:");
+        println!();
+        for handler in &handlers {
+            let dry_run_note = if handler.supports_dry_run() {
+                " (supports --dry-run)"
+            } else {
+                ""
+            };
+            println!("  {}{}", handler.name(), dry_run_note);
+            println!("    {}", handler.description());
+            println!();
         }
-    }
-
-    if !created.is_empty() {
-        println!("created .archidoc/custom/:");
-        for name in &created {
-            println!("  {}", name);
-        }
-    }
-    if !skipped.is_empty() {
-        println!("skipped (already exist):");
-        for name in &skipped {
-            println!("  {}", name);
-        }
-    }
-    println!();
-    println!("edit these files to override suggest and summary table output.");
-    println!("delete a file to revert that template to the built-in default.");
-}
-
-fn run_tree(
-    path: Option<&std::path::Path>,
-    files_variant: bool,
-    both: bool,
-    human: bool,
-    depth: Option<usize>,
-    out_dir: &PathBuf,
-) {
-    let root = path
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
-
-    if !root.exists() {
-        eprintln!("error: path does not exist: {}", root.display());
-        std::process::exit(1);
-    }
-
-    // Load tree config from .archidoc/config.tree.json (falls back to defaults silently)
-    let config = archidoc_engine::tree::TreeConfig::load(&root);
-
-    // Resolve output directory relative to root
-    let out_path = if out_dir.is_absolute() {
-        out_dir.clone()
-    } else {
-        root.join(out_dir)
-    };
-    fs::create_dir_all(&out_path).unwrap_or_else(|e| {
-        eprintln!("error: failed to create output dir {}: {}", out_path.display(), e);
-        std::process::exit(1);
-    });
-
-    let emit_dirs = !files_variant || both;
-    let emit_files = files_variant || both;
-
-    if emit_dirs {
-        let content = format!(
-            "# Directory Tree\n\n> Auto-generated by archidoc. Do not edit manually.\n\n```\n{}```\n",
-            archidoc_engine::tree::compact_dirs_tree(&root, depth, &config)
-        );
-        let dest = out_path.join("ARCHITECTURE.ai.tree.md");
-        fs::write(&dest, &content).unwrap_or_else(|e| {
-            eprintln!("error: failed to write {}: {}", dest.display(), e);
-            std::process::exit(1);
-        });
-        println!("wrote {}", dest.display());
-    }
-
-    if emit_files {
-        let content = format!(
-            "# File Tree\n\n> Auto-generated by archidoc. Do not edit manually.\n\n```\n{}```\n",
-            archidoc_engine::tree::compact_files_tree(&root, depth, &config)
-        );
-        let dest = out_path.join("ARCHITECTURE.ai.files.md");
-        fs::write(&dest, &content).unwrap_or_else(|e| {
-            eprintln!("error: failed to write {}: {}", dest.display(), e);
-            std::process::exit(1);
-        });
-        println!("wrote {}", dest.display());
-    }
-
-    if human {
-        let root_name = root
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(".");
-        let content = format!(
-            "# Directory Tree — {}\n\n> Auto-generated by archidoc. Do not edit manually.\n\n{}\n",
-            root_name,
-            archidoc_engine::tree::compact_human_tree(&root, depth, &config)
-        );
-        let dest = out_path.join("ARCHITECTURE.tree.md");
-        fs::write(&dest, &content).unwrap_or_else(|e| {
-            eprintln!("error: failed to write {}: {}", dest.display(), e);
-            std::process::exit(1);
-        });
-        println!("wrote {}", dest.display());
-    }
-}
-
-fn run_audit(path: Option<&std::path::Path>) {
-    let root = path
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
-
-    if !root.exists() {
-        eprintln!("error: path does not exist: {}", root.display());
-        std::process::exit(1);
-    }
-
-    let missing = archidoc_engine::scaffold::find_missing(&root);
-
-    if missing.is_empty() {
-        println!("all directories have _index.md files.");
         return;
     }
 
-    println!("missing _index.md: {} dirs", missing.len());
-    println!();
-    for dir in &missing {
-        // Print relative to root for readability
-        let display = dir.strip_prefix(&root).unwrap_or(dir);
-        println!("  {}", display.display());
-    }
-    println!();
-    println!("run `archidoc scaffold` to create stubs for all missing dirs.");
-}
-
-fn run_scaffold(path: Option<&std::path::Path>) {
-    let root = path
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
-
-    if !root.exists() {
-        eprintln!("error: path does not exist: {}", root.display());
+    let Some(name) = &args.name else {
+        eprintln!("error: provide a handler name or use --list");
         std::process::exit(1);
+    };
+
+    let handler = match init_cmd::find_handler(name) {
+        Some(h) => h,
+        None => {
+            eprintln!("error: unknown init handler '{}'", name);
+            eprintln!();
+            eprintln!("run `archidoc init-file --list` to see available handlers.");
+            std::process::exit(1);
+        }
+    };
+
+    let cwd = std::env::current_dir().expect("failed to get current directory");
+    let target = args.target.unwrap_or_else(|| cwd.clone());
+    let target = if target.is_absolute() {
+        target
+    } else {
+        cwd.join(target)
+    };
+
+    let vars: std::collections::BTreeMap<String, String> =
+        args.vars.into_iter().collect();
+
+    let extra_args = archidoc_engine::init_cmd::HandlerArgs {
+        files: args.files,
+        human: args.human,
+        both: args.both,
+        depth: args.depth,
+        lang: args.lang,
+        out: args.out,
+    };
+
+    // Dry-run mode
+    if args.dry_run {
+        if handler.supports_dry_run() {
+            match handler.dry_run(&target, &vars, &extra_args) {
+                Ok(items) => {
+                    if items.is_empty() {
+                        println!("nothing to do.");
+                    } else {
+                        println!("would generate ({} items):", items.len());
+                        println!();
+                        for item in &items {
+                            println!("  {}", item);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("error: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            eprintln!("error: handler '{}' does not support --dry-run", name);
+            std::process::exit(1);
+        }
+        return;
     }
 
-    let report = archidoc_engine::scaffold::write_stubs(&root);
+    // Generate
+    match handler.generate(&target, &vars, &extra_args) {
+        Ok(outputs) => {
+            if outputs.is_empty() {
+                println!("nothing to generate.");
+                return;
+            }
 
-    for dir in &report.created {
-        let display = dir.strip_prefix(&root).unwrap_or(dir);
-        println!("created  {}", display.display());
-    }
-    for dir in &report.skipped {
-        let display = dir.strip_prefix(&root).unwrap_or(dir);
-        println!("skipped  {}", display.display());
-    }
-    for (dir, err) in &report.errors {
-        let display = dir.strip_prefix(&root).unwrap_or(dir);
-        eprintln!("error    {}  ({})", display.display(), err);
-    }
-
-    println!();
-    println!(
-        "created: {}  skipped: {}  errors: {}",
-        report.created.len(),
-        report.skipped.len(),
-        report.errors.len()
-    );
-
-    if !report.created.is_empty() {
-        println!();
-        println!("find stubs needing content:");
-        println!("  grep -rl \"TODO: archidoc\" . --include=\"_index.md\"");
+            for output in &outputs {
+                if output.path.to_string_lossy() == "-" {
+                    // stdout sentinel — print directly
+                    print!("{}", output.contents);
+                } else {
+                    // Write to file
+                    if let Some(parent) = output.path.parent() {
+                        if !parent.exists() {
+                            if let Err(e) = fs::create_dir_all(parent) {
+                                eprintln!("error: failed to create {}: {}", parent.display(), e);
+                                std::process::exit(1);
+                            }
+                        }
+                    }
+                    match fs::write(&output.path, &output.contents) {
+                        Ok(_) => {
+                            let display = output
+                                .path
+                                .strip_prefix(&target)
+                                .unwrap_or(&output.path);
+                            println!("wrote {}", display.display());
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "error: failed to write {}: {}",
+                                output.path.display(),
+                                e
+                            );
+                            std::process::exit(1);
+                        }
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("error: {}", e);
+            std::process::exit(1);
+        }
     }
 }
 
+fn run_new(args: NewArgs) {
+    let cwd = std::env::current_dir().expect("failed to get current directory");
+
+    if args.list {
+        let templates = archidoc_engine::folder_scaffold::list_templates(&cwd);
+        if templates.is_empty() {
+            println!("no folder templates found.");
+            println!();
+            println!("create templates in .archidoc/templates/scaffold-folder-templates/<name>/");
+            return;
+        }
+        println!("available folder templates:");
+        println!();
+        for (name, path, manifest) in &templates {
+            let rel = path
+                .strip_prefix(&cwd)
+                .unwrap_or(path);
+            println!("  {}  (from {})", name, rel.display());
+            println!("    {}", manifest.template.description);
+            if !manifest.variables.is_empty() {
+                let var_names: Vec<&str> = manifest.variables.iter().map(|v| v.name.as_str()).collect();
+                println!("    vars: {}", var_names.join(", "));
+            }
+            println!();
+        }
+        return;
+    }
+
+    let Some(name) = &args.name else {
+        eprintln!("error: provide a template name or use --list");
+        std::process::exit(1);
+    };
+
+    // Discover template
+    let template_dir = match archidoc_engine::folder_scaffold::discover_template(name, &cwd) {
+        Ok(dir) => dir,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            eprintln!();
+            eprintln!("run `archidoc new --list` to see available templates.");
+            std::process::exit(1);
+        }
+    };
+
+    // Load manifest
+    let manifest = match archidoc_engine::folder_scaffold::load_manifest(&template_dir) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Inspect mode
+    if args.inspect {
+        println!("template: {}", manifest.template.name);
+        println!("version:  {}", manifest.template.version);
+        println!("description: {}", manifest.template.description);
+        println!();
+        if manifest.variables.is_empty() {
+            println!("no variables required.");
+        } else {
+            println!("variables:");
+            for var in &manifest.variables {
+                let required = if var.required { "required" } else { "optional" };
+                let default = var
+                    .default
+                    .as_deref()
+                    .map(|d| format!(" (default: {})", d))
+                    .unwrap_or_default();
+                println!("  --var {}=<value>  [{}{}]", var.name, required, default);
+                println!("    {}", var.description);
+            }
+        }
+        if !manifest.post_hooks.is_empty() {
+            println!();
+            println!("post-hooks:");
+            for hook in &manifest.post_hooks {
+                println!("  {} — {}", hook.command, hook.description);
+            }
+        }
+        return;
+    }
+
+    // Collect variables
+    let variables = match archidoc_engine::folder_scaffold::collect_variables(&manifest, &args.vars)
+    {
+        Ok(v) => v,
+        Err(archidoc_engine::folder_scaffold::ScaffoldError::MissingVariables(missing)) => {
+            eprintln!("error: missing required variable(s): {}", missing.join(", "));
+            eprintln!();
+            eprintln!("provide them with --var flags:");
+            for name in &missing {
+                let desc = manifest
+                    .variables
+                    .iter()
+                    .find(|v| &v.name == name)
+                    .map(|v| v.description.as_str())
+                    .unwrap_or("");
+                eprintln!("  --var {}=<value>    {}", name, desc);
+            }
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Determine target
+    let target = args.target.unwrap_or_else(|| cwd.clone());
+    let target = if target.is_absolute() {
+        target
+    } else {
+        cwd.join(target)
+    };
+
+    // Build plan
+    let plan = match archidoc_engine::folder_scaffold::build_plan(
+        name,
+        &template_dir,
+        &target,
+        &variables,
+        manifest.post_hooks.clone(),
+        args.force,
+    ) {
+        Ok(p) => p,
+        Err(archidoc_engine::folder_scaffold::ScaffoldError::WouldOverwrite(path)) => {
+            eprintln!(
+                "error: would overwrite existing file: {}",
+                path.display()
+            );
+            eprintln!("use --force to overwrite.");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Dry run
+    if args.dry_run {
+        println!("dry run — would create:");
+        println!();
+        for action in &plan.actions {
+            match action {
+                archidoc_engine::folder_scaffold::ScaffoldAction::CreateDir { path } => {
+                    let rel = path.strip_prefix(&target).unwrap_or(path);
+                    println!("  dir   {}/", rel.display());
+                }
+                archidoc_engine::folder_scaffold::ScaffoldAction::CreateFile { path, .. } => {
+                    let rel = path.strip_prefix(&target).unwrap_or(path);
+                    println!("  file  {}", rel.display());
+                }
+            }
+        }
+        if !plan.post_hooks.is_empty() {
+            println!();
+            println!("post-hooks:");
+            for hook in &plan.post_hooks {
+                println!("  {}", hook.command);
+            }
+        }
+        return;
+    }
+
+    // Execute
+    match archidoc_engine::folder_scaffold::execute_plan(&plan) {
+        Ok(result) => {
+            let mut created = 0;
+            let mut skipped = 0;
+            for outcome in &result.outcomes {
+                match outcome {
+                    archidoc_engine::folder_scaffold::ActionOutcome::Created(path) => {
+                        let rel = path.strip_prefix(&target).unwrap_or(path);
+                        println!("created  {}", rel.display());
+                        created += 1;
+                    }
+                    archidoc_engine::folder_scaffold::ActionOutcome::Skipped { path, .. } => {
+                        skipped += 1;
+                        let rel = path.strip_prefix(&target).unwrap_or(path);
+                        println!("skipped  {}", rel.display());
+                    }
+                    archidoc_engine::folder_scaffold::ActionOutcome::Failed { path, error } => {
+                        let rel = path.strip_prefix(&target).unwrap_or(path);
+                        eprintln!("failed   {}  ({})", rel.display(), error);
+                    }
+                }
+            }
+            println!();
+            println!("created: {}  skipped: {}", created, skipped);
+
+            // Report hook results
+            for hr in &result.hook_results {
+                if hr.success {
+                    println!("hook ok: {}", hr.command);
+                } else {
+                    eprintln!("hook failed: {} — {}", hr.command, hr.output.trim());
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Polyglot adapter detection — auto-detect and merge language adapters
@@ -867,119 +966,3 @@ fn detect_and_run_ts_adapter(root: &std::path::Path, verbosity: Verbosity) -> Ve
     }
 }
 
-fn run_init_adapter(lang: &str) {
-    println!("Creating adapter scaffold for '{}'...", lang);
-
-    let adapter_dir = PathBuf::from("adapters").join(format!("archidoc-{}", lang));
-
-    if adapter_dir.exists() {
-        eprintln!("error: directory already exists: {}", adapter_dir.display());
-        std::process::exit(1);
-    }
-
-    fs::create_dir_all(adapter_dir.join("src"))
-        .expect("failed to create adapter directory structure");
-
-    let cargo_toml = format!(
-        r#"[package]
-name = "archidoc-{lang}"
-version = "0.1.0"
-edition = "2021"
-description = "Language adapter for {lang} — extracts archidoc annotations"
-license = "MIT"
-repository = "https://github.com/archidoc/archidoc"
-keywords = ["c4-model", "architecture", "documentation", "{lang}"]
-categories = ["development-tools"]
-
-[dependencies]
-archidoc-types = {{ version = "0.1.0", path = "../../core/archidoc-types" }}
-"#
-    );
-
-    let lib_rs = format!(
-        r#"//! # Archidoc {lang} Adapter
-//!
-//! Language adapter for extracting archidoc annotations from {lang} source code.
-//!
-//! ## TODO: Implementation Guide
-//!
-//! 1. **Parser** (parser.rs): Parse {lang} source files and extract annotation comments
-//!    - Identify archidoc annotation format in {lang} (e.g., docstrings, decorators, comments)
-//!    - Extract module_path, c4_level, purpose, pattern, etc.
-//!    - Parse file tables, relationships, and other metadata
-//!
-//! 2. **Walker** (walker.rs): Traverse source tree and aggregate ModuleDoc
-//!    - Recursively walk {lang} source directories
-//!    - Call parser on each relevant file
-//!    - Aggregate results into Vec<ModuleDoc>
-//!
-//! 3. **Integration**: Export `extract_all_docs` function for CLI usage
-//!
-//! See archidoc-rust adapter for a reference implementation.
-
-pub mod parser;
-pub mod walker;
-
-pub use walker::extract_all_docs;
-"#
-    );
-
-    let parser_rs = format!(
-        r#"use archidoc_types::ModuleDoc;
-
-/// Parse archidoc annotations from a {lang} source file.
-///
-/// TODO: Implement parser for {lang} annotation format
-///
-/// Returns Some(ModuleDoc) if annotations are found, None otherwise.
-pub fn parse_file(path: &std::path::Path) -> Option<ModuleDoc> {{
-    // TODO: Read file content
-    // TODO: Parse annotations based on {lang} comment/docstring conventions
-    // TODO: Extract module_path, c4_level, purpose, pattern, files, relationships
-    // TODO: Return ModuleDoc
-
-    None
-}}
-"#
-    );
-
-    let walker_rs = format!(
-        r#"use std::path::Path;
-use archidoc_types::ModuleDoc;
-
-use crate::parser;
-
-/// Extract all archidoc annotations from a {lang} source tree.
-///
-/// TODO: Implement directory traversal for {lang} projects
-///
-/// Recursively walks the source tree and parses each file.
-pub fn extract_all_docs(root: &Path) -> Vec<ModuleDoc> {{
-    let mut docs = Vec::new();
-
-    // TODO: Implement recursive directory walk
-    // TODO: Filter for {lang} source files
-    // TODO: Call parser::parse_file on each file
-    // TODO: Collect non-None results into docs vector
-
-    docs.sort_by(|a, b| a.module_path.cmp(&b.module_path));
-    docs
-}}
-"#
-    );
-
-    fs::write(adapter_dir.join("Cargo.toml"), cargo_toml).expect("failed to write Cargo.toml");
-    fs::write(adapter_dir.join("src").join("lib.rs"), lib_rs).expect("failed to write lib.rs");
-    fs::write(adapter_dir.join("src").join("parser.rs"), parser_rs)
-        .expect("failed to write parser.rs");
-    fs::write(adapter_dir.join("src").join("walker.rs"), walker_rs)
-        .expect("failed to write walker.rs");
-
-    println!("Created adapter scaffold at: {}", adapter_dir.display());
-    println!("\nNext steps:");
-    println!("  1. cd {}", adapter_dir.display());
-    println!("  2. Implement parser.rs to extract {} annotations", lang);
-    println!("  3. Implement walker.rs to traverse {} source trees", lang);
-    println!("  4. Test with: cargo test");
-    println!("  5. Integrate with CLI by adding dependency in archidoc-cli/Cargo.toml");
-}

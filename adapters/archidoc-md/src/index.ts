@@ -100,6 +100,33 @@ function scanDirectory(dir: string): string[] {
 }
 
 /**
+ * Format a file row to match the column count from the template's header.
+ * Detects the header line (starts with `|` and contains `File` or `Name`),
+ * counts its columns, and pads the row with `[TODO]` / empty cells.
+ * Falls back to 3-column default if no header is found.
+ */
+function formatFileRow(item: string, template: string): string {
+  const headerLine = template.split("\n").find((line) => {
+    const t = line.trim();
+    return t.startsWith("|") && /\bfile\b|\bname\b/i.test(t);
+  });
+
+  if (!headerLine) {
+    return `| \`${item}\` | [TODO] | active |`;
+  }
+
+  const cols = headerLine.split("|").filter((s) => s.trim()).length;
+  // col 1 = file name, last col = empty (Notes), second-to-last = "active" (Health)
+  const cells: string[] = [`\`${item}\``];
+  for (let i = 1; i < cols; i++) {
+    if (i === cols - 2) cells.push("active");      // Health column
+    else if (i === cols - 1) cells.push("");        // Notes column
+    else cells.push("[TODO]");                      // Purpose/Content/Takeaway
+  }
+  return `| ${cells.join(" | ")} |`;
+}
+
+/**
  * Infer C4 level from directory depth relative to the scan root.
  * Depth 1 from root = container, deeper = component.
  */
@@ -130,7 +157,7 @@ function runSuggest(dir: string): void {
   const items = scanDirectory(dir);
 
   const fileRows = items
-    .map((item) => `| \`${item}\` | [TODO] | active |`)
+    .map((item) => formatFileRow(item, template))
     .join("\n");
 
   const output = substitute(template, {

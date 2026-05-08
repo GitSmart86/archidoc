@@ -12,8 +12,8 @@ A step-by-step guide for adopting archidoc on an existing codebase.
 Before annotating individual modules, set up the project-level narrative. This captures the high-level context that no single module can express — data flow, concurrency model, deployment targets, and external dependencies.
 
 ```bash
-archidoc init          # auto-detects Rust or TypeScript
-archidoc init --lang rust   # explicit
+archidoc init root-annotation .              # auto-detects Rust or TypeScript
+archidoc init root-annotation . --lang rust  # explicit
 ```
 
 This prints a `lib.rs` doc comment template to stdout with TODO placeholders:
@@ -88,8 +88,8 @@ Start with 3-5 containers. You can always add more later.
 You can scaffold an annotation template automatically:
 
 ```bash
-archidoc suggest src/api/               # prints template to stdout
-archidoc suggest src/api/ >> src/api/mod.rs   # append directly to the entry file
+archidoc init c4-annotation src/api/               # prints template to stdout
+archidoc init c4-annotation src/api/ >> src/api/mod.rs   # append directly to the entry file
 ```
 
 Or write it by hand. Open the entry file for your first container (`mod.rs` for Rust, `index.ts` for TypeScript) and add the annotation block.
@@ -250,7 +250,7 @@ Or use the pre-commit hook in `hooks/pre-commit`.
 
 **Ghost entries**: File table lists a file that doesn't exist. Usually means the file was renamed or deleted. Update the table.
 
-**Stale descriptions**: The description line is the first non-marker paragraph. If you refactor a module's purpose, update this line too.
+**Stale descriptions**: The description is the first non-empty, non-marker line — a summary sentence, not a paragraph. If you refactor a module's purpose, update this line too.
 
 **Missing relationships**: If module A imports from module B, add a `@c4 uses b "..." "..."` marker. The diagram should show all runtime dependencies.
 
