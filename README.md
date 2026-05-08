@@ -173,8 +173,16 @@ archidoc init tree . --both --out docs/
 
 The `scaffold` command copies a named template tree from `.archidoc/templates/scaffold-templates/<name>/` to the target directory, substituting `{{variable}}` tokens in paths and file contents. Templates are discovered by walking up the directory tree — firm-level templates at a workspace root are available from any subdirectory.
 
+**Bootstrap `.archidoc/` — built-in templates work even before `.archidoc/` exists:**
+
 ```bash
-# List available folder templates
+archidoc scaffold custom-scaffolds    # create .archidoc/scaffold-templates/ for your templates
+archidoc scaffold custom-inits        # create .archidoc/init-overrides/ with default override files
+archidoc scaffold custom-trees        # create .archidoc/config.tree.json for tree customization
+```
+
+```bash
+# List available folder templates (built-ins + your own)
 archidoc scaffold --list
 
 # Inspect a template (show variables, description, post-hooks)

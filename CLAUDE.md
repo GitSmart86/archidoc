@@ -39,7 +39,10 @@ archidoc init tree . --depth 3               # limit depth
 Copies a named template tree from `.archidoc/templates/scaffold-templates/<name>/` with `{{variable}}` substitution.
 
 ```bash
-archidoc scaffold --list                      # list templates
+archidoc scaffold --list                      # list templates (built-in + disk)
+archidoc scaffold custom-scaffolds            # bootstrap .archidoc/scaffold-templates/
+archidoc scaffold custom-inits                # bootstrap .archidoc/init-overrides/ with defaults
+archidoc scaffold custom-trees                # bootstrap .archidoc/config.tree.json
 archidoc scaffold <name> --inspect            # show vars + description
 archidoc scaffold <name> --dry-run --var ...  # preview
 archidoc scaffold <name> --target ./dir --var key=value --var key2=value2

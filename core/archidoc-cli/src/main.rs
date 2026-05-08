@@ -670,22 +670,38 @@ fn run_init_file(args: InitFileArgs) {
 }
 
 fn run_new(args: NewArgs) {
+    use archidoc_engine::folder_scaffold;
+
     let cwd = std::env::current_dir().expect("failed to get current directory");
 
     if args.list {
-        let templates = archidoc_engine::folder_scaffold::list_templates(&cwd);
-        if templates.is_empty() {
+        let disk_templates = folder_scaffold::list_templates(&cwd);
+        let disk_names: Vec<&str> = disk_templates.iter().map(|(n, _, _)| n.as_str()).collect();
+
+        let has_any = !disk_templates.is_empty() || !folder_scaffold::BUILTIN_NAMES.is_empty();
+        if !has_any {
             println!("no folder templates found.");
-            println!();
-            println!("create templates in .archidoc/scaffold-templates/<name>/");
             return;
         }
+
         println!("available folder templates:");
         println!();
-        for (name, path, manifest) in &templates {
-            let rel = path
-                .strip_prefix(&cwd)
-                .unwrap_or(path);
+
+        // Built-in templates first
+        for &builtin_name in folder_scaffold::BUILTIN_NAMES {
+            if disk_names.contains(&builtin_name) {
+                continue; // disk shadows built-in
+            }
+            if let Some(manifest) = folder_scaffold::builtin_manifest(builtin_name) {
+                println!("  {}  (built-in)", builtin_name);
+                println!("    {}", manifest.template.description);
+                println!();
+            }
+        }
+
+        // Disk templates
+        for (name, path, manifest) in &disk_templates {
+            let rel = path.strip_prefix(&cwd).unwrap_or(path);
             println!("  {}  (from {})", name, rel.display());
             println!("    {}", manifest.template.description);
             if !manifest.variables.is_empty() {
@@ -702,19 +718,97 @@ fn run_new(args: NewArgs) {
         std::process::exit(1);
     };
 
-    // Discover template
-    let template_dir = match archidoc_engine::folder_scaffold::discover_template(name, &cwd) {
+    // Check if it's a built-in template
+    if folder_scaffold::is_builtin(name) {
+        let manifest = folder_scaffold::builtin_manifest(name).unwrap();
+
+        if args.inspect {
+            println!("template: {} (built-in)", manifest.template.name);
+            println!("description: {}", manifest.template.description);
+            println!();
+            println!("no variables required.");
+            return;
+        }
+
+        let target = args.target.unwrap_or_else(|| cwd.clone());
+        let target = if target.is_absolute() { target } else { cwd.join(target) };
+
+        let plan = match folder_scaffold::builtin_plan(name, &target, args.force) {
+            Ok(p) => p,
+            Err(folder_scaffold::ScaffoldError::WouldOverwrite(path)) => {
+                eprintln!("error: would overwrite existing file: {}", path.display());
+                eprintln!("use --force to overwrite.");
+                std::process::exit(1);
+            }
+            Err(e) => {
+                eprintln!("error: {}", e);
+                std::process::exit(1);
+            }
+        };
+
+        if args.dry_run {
+            println!("dry run — would create:");
+            println!();
+            for action in &plan.actions {
+                match action {
+                    folder_scaffold::ScaffoldAction::CreateDir { path } => {
+                        let rel = path.strip_prefix(&target).unwrap_or(path);
+                        println!("  dir   {}/", rel.display());
+                    }
+                    folder_scaffold::ScaffoldAction::CreateFile { path, .. } => {
+                        let rel = path.strip_prefix(&target).unwrap_or(path);
+                        println!("  file  {}", rel.display());
+                    }
+                }
+            }
+            return;
+        }
+
+        match folder_scaffold::execute_plan(&plan) {
+            Ok(result) => {
+                let mut created = 0;
+                let mut skipped = 0;
+                for outcome in &result.outcomes {
+                    match outcome {
+                        folder_scaffold::ActionOutcome::Created(path) => {
+                            let rel = path.strip_prefix(&target).unwrap_or(path);
+                            println!("created  {}", rel.display());
+                            created += 1;
+                        }
+                        folder_scaffold::ActionOutcome::Skipped { path, .. } => {
+                            let rel = path.strip_prefix(&target).unwrap_or(path);
+                            println!("skipped  {}", rel.display());
+                            skipped += 1;
+                        }
+                        folder_scaffold::ActionOutcome::Failed { path, error } => {
+                            let rel = path.strip_prefix(&target).unwrap_or(path);
+                            eprintln!("failed   {}  ({})", rel.display(), error);
+                        }
+                    }
+                }
+                println!();
+                println!("created: {}  skipped: {}", created, skipped);
+            }
+            Err(e) => {
+                eprintln!("error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    // Disk template discovery
+    let template_dir = match folder_scaffold::discover_template(name, &cwd) {
         Ok(dir) => dir,
         Err(e) => {
             eprintln!("error: {}", e);
             eprintln!();
-            eprintln!("run `archidoc new --list` to see available templates.");
+            eprintln!("run `archidoc scaffold --list` to see available templates.");
             std::process::exit(1);
         }
     };
 
-    // Load manifest
-    let manifest = match archidoc_engine::folder_scaffold::load_manifest(&template_dir) {
+    let manifest = match folder_scaffold::load_manifest(&template_dir) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("error: {}", e);
@@ -722,7 +816,6 @@ fn run_new(args: NewArgs) {
         }
     };
 
-    // Inspect mode
     if args.inspect {
         println!("template: {}", manifest.template.name);
         println!("version:  {}", manifest.template.version);
@@ -753,11 +846,9 @@ fn run_new(args: NewArgs) {
         return;
     }
 
-    // Collect variables
-    let variables = match archidoc_engine::folder_scaffold::collect_variables(&manifest, &args.vars)
-    {
+    let variables = match folder_scaffold::collect_variables(&manifest, &args.vars) {
         Ok(v) => v,
-        Err(archidoc_engine::folder_scaffold::ScaffoldError::MissingVariables(missing)) => {
+        Err(folder_scaffold::ScaffoldError::MissingVariables(missing)) => {
             eprintln!("error: missing required variable(s): {}", missing.join(", "));
             eprintln!();
             eprintln!("provide them with --var flags:");
@@ -778,7 +869,6 @@ fn run_new(args: NewArgs) {
         }
     };
 
-    // Determine target
     let target = args.target.unwrap_or_else(|| cwd.clone());
     let target = if target.is_absolute() {
         target
