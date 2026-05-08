@@ -36,7 +36,7 @@ archidoc init tree . --depth 3               # limit depth
 
 ### `archidoc scaffold <name> [--target dir] [--var k=v]` — Folder templates
 
-Copies a named template tree from `.archidoc/templates/scaffold-templates/<name>/` with `{{variable}}` substitution.
+Copies a named template tree from `.archidoc/scaffold-templates/<name>/` with `{{variable}}` substitution.
 
 ```bash
 archidoc scaffold --list                      # list templates (built-in + disk)

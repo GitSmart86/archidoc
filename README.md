@@ -171,7 +171,7 @@ archidoc init tree . --both --out docs/
 
 ### Scaffold — create projects from folder templates
 
-The `scaffold` command copies a named template tree from `.archidoc/templates/scaffold-templates/<name>/` to the target directory, substituting `{{variable}}` tokens in paths and file contents. Templates are discovered by walking up the directory tree — firm-level templates at a workspace root are available from any subdirectory.
+The `scaffold` command copies a named template tree from `.archidoc/scaffold-templates/<name>/` to the target directory, substituting `{{variable}}` tokens in paths and file contents. Templates are discovered by walking up the directory tree — firm-level templates at a workspace root are available from any subdirectory.
 
 **Bootstrap `.archidoc/` — built-in templates work even before `.archidoc/` exists:**
 
@@ -204,7 +204,7 @@ archidoc scaffold client --target ./clients/Acme --force --var ...
 
 **Creating your own templates:**
 
-1. Create a directory under `.archidoc/templates/scaffold-templates/<name>/`
+1. Create a directory under `.archidoc/scaffold-templates/<name>/`
 2. Add a `.archidoc-template.toml` manifest:
 
 ```toml

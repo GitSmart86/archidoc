@@ -117,7 +117,7 @@ fn infer_c4_level(dir: &Path, root: &Path) -> &'static str {
 
 /// Generate `_index.md` content for the given directory.
 ///
-/// If a custom template exists at `.archidoc/custom/_index.md`, uses it with
+/// If a custom template exists at `.archidoc/init-overrides/_index.md`, uses it with
 /// `{{c4_level}}` and `{{file_rows}}` substitution. Otherwise falls back to
 /// the built-in stub format.
 pub fn scaffold_stub(dir: &Path, root: &Path) -> String {
@@ -232,7 +232,7 @@ pub struct ScaffoldReport {
 
 /// Write `_index.md` files for every directory under `root` that is missing one.
 ///
-/// If a custom template exists at `.archidoc/custom/_index.md`, uses it.
+/// If a custom template exists at `.archidoc/init-overrides/_index.md`, uses it.
 /// Otherwise falls back to the built-in stub format.
 ///
 /// Idempotent — existing files are never overwritten. Returns a report of what

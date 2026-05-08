@@ -100,16 +100,22 @@ enum Commands {
     Init(InitFileArgs),
     /// Create a project from a folder template
     ///
-    /// Copies a named template tree from `.archidoc/templates/scaffold-templates/<name>/`
+    /// Copies a named template tree from `.archidoc/scaffold-templates/<name>/`
     /// to the target directory, substituting `{{variable}}` tokens in paths and file contents.
     ///
     /// Templates are discovered by walking up the directory tree — firm-level templates
     /// at a workspace root are available from any subdirectory.
     ///
-    /// Examples:
-    ///   archidoc scaffold client --target ./clients/Acme --var client_name=Acme --var engagement_id=2026-001
+    /// Three built-in templates bootstrap .archidoc/ (work before it exists):
+    ///   archidoc scaffold custom-scaffolds       # create scaffold-templates/ dir
+    ///   archidoc scaffold custom-inits           # create init-overrides/ with defaults
+    ///   archidoc scaffold custom-trees           # create config.tree.json
+    ///
+    /// User template examples:
     ///   archidoc scaffold --list
+    ///   archidoc scaffold client --inspect
     ///   archidoc scaffold client --dry-run --var client_name=Test
+    ///   archidoc scaffold client --target ./clients/Acme --var client_name=Acme
     Scaffold(NewArgs),
 }
 

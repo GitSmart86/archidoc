@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`archidoc scaffold` command** — creates projects from folder templates. Copies named template trees from `.archidoc/templates/scaffold-folder-templates/<name>/` with `{{variable}}` substitution in paths and file contents. Supports `--list`, `--inspect`, `--dry-run`, `--force`, `--var key=value`, and `--target <path>`. Walk-up directory discovery finds firm-level templates from any subdirectory.
+- **`archidoc scaffold` command** — creates projects from folder templates. Copies named template trees from `.archidoc/scaffold-templates/<name>/` with `{{variable}}` substitution in paths and file contents. Supports `--list`, `--inspect`, `--dry-run`, `--force`, `--var key=value`, and `--target <path>`. Walk-up directory discovery finds firm-level templates from any subdirectory.
 - **`.archidoc-template.toml` manifest** — defines template name, description, version, required/optional variables with defaults, and post-scaffold hooks.
 - **`archidoc init` command** — unified handler-based file generation from environment context. Replaces `suggest`, `init` (old), `scaffold` (old stubs), `audit`, and `tree` commands with a single dispatch surface. Use `archidoc init --list` to see available handlers.
 - **Init handlers**: `_index.md` (directory listing stubs with `--dry-run`), `c4-annotation` (module annotation templates), `root-annotation` (root-level lib.rs/index.ts templates), `tree` (directory tree with `--files`, `--human`, `--both`, `--depth` flags).
@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `archidoc scaffold` (old stubs) — use `archidoc init _index.md <dir>` instead
 - `archidoc audit` — use `archidoc init _index.md <dir> --dry-run` instead
 - `archidoc tree` — use `archidoc init tree .` instead
-- `archidoc templates` — edit files directly in `.archidoc/templates/init-file-templates/`
+- `archidoc templates` — edit files directly in `.archidoc/init-overrides/`
 - `archidoc init-adapter` — will be replaced by `archidoc scaffold adapter` template
 - `archidoc info` — use `archidoc --help` instead
 

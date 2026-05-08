@@ -89,10 +89,10 @@ fn read_optional(path: &Path) -> Option<String> {
 
 // ---------------------------------------------------------------------------
 // Default template strings — used by `archidoc init` to scaffold
-// `.archidoc/custom/` and as the fallback when no override exists.
+// `.archidoc/init-overrides/` and as the fallback when no override exists.
 // ---------------------------------------------------------------------------
 
-/// Default parameterized Rust suggest template (`.archidoc/custom/mod.rs`).
+/// Default parameterized Rust suggest template (`.archidoc/init-overrides/mod.rs`).
 pub const DEFAULT_SUGGEST_RUST: &str = "\
 //! @c4 {{c4_level}}
 //!
@@ -104,7 +104,7 @@ pub const DEFAULT_SUGGEST_RUST: &str = "\
 //! |------|---------|---------|--------|
 {{file_rows}}";
 
-/// Default parameterized TypeScript suggest template (`.archidoc/custom/index.ts`).
+/// Default parameterized TypeScript suggest template (`.archidoc/init-overrides/index.ts`).
 pub const DEFAULT_SUGGEST_TS: &str = "\
 /**
  * @c4 {{c4_level}}
@@ -117,7 +117,7 @@ pub const DEFAULT_SUGGEST_TS: &str = "\
  * |------|---------|---------|--------|
 {{file_rows}} */";
 
-/// Default parameterized Markdown suggest template (`.archidoc/custom/_index.md`).
+/// Default parameterized Markdown suggest template (`.archidoc/init-overrides/_index.md`).
 pub const DEFAULT_SUGGEST_MD: &str = "\
 <!-- @c4 {{c4_level}} -->
 
@@ -127,7 +127,7 @@ pub const DEFAULT_SUGGEST_MD: &str = "\
 |------|---------|--------|
 {{file_rows}}";
 
-/// Default architecture summary table header (`.archidoc/custom/architecture-table.md`).
+/// Default architecture summary table header (`.archidoc/init-overrides/architecture-table.md`).
 pub const DEFAULT_ARCHITECTURE_TABLE: &str = "\
 | Module | Level | Pattern | Description |
 |--------|-------|---------|-------------|";

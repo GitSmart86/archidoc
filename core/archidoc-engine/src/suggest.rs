@@ -34,7 +34,7 @@ pub fn suggest_annotation(dir: &Path, template: Option<&str>) -> String {
         );
     }
 
-    // Hardcoded default (fallback when no .archidoc/custom/mod.rs exists)
+    // Hardcoded default (fallback when no .archidoc/init-overrides/mod.rs exists)
     let mut output = String::new();
     output.push_str(&format!("//! @c4 {}\n", c4_level));
     output.push_str("//!\n");
