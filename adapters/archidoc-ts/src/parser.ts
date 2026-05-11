@@ -10,8 +10,8 @@
 
 import type {
   C4Level,
-  FileEntry,
   HealthStatus,
+  ParsedFileEntry,
   PatternStatus,
   Relationship,
 } from "./types.js";
@@ -292,8 +292,8 @@ function classifyColumn(col: string): ColumnKind {
  * Column order is driven by the header, not hardcoded positions.
  * Unknown column names are stored in `FileEntry.extra`.
  */
-export function extractFileTable(content: string): FileEntry[] {
-  const entries: FileEntry[] = [];
+export function extractFileTable(content: string): ParsedFileEntry[] {
+  const entries: ParsedFileEntry[] = [];
   let colKinds: ColumnKind[] = [];
   let colNames: string[] = [];
   let inTable = false;

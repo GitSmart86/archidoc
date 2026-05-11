@@ -203,22 +203,6 @@ pub trait ArchitectureDriver: Send {
     fn confirm_fitness_fails(&self, fitness_name: &str, failing_module: &str);
 
     // =========================================================================
-    // Phase L — Annotation scaffolding
-    // =========================================================================
-
-    /// Generate annotation template for a module's directory.
-    fn suggest_for(&mut self, element: &str);
-
-    /// Get the generated suggestion output.
-    fn suggestion_output(&self) -> &str;
-
-    /// Confirm the suggestion infers the expected C4 level.
-    fn confirm_suggestion_level(&self, level: &str);
-
-    /// Confirm the suggestion lists a source file.
-    fn confirm_suggestion_lists_file(&self, filename: &str);
-
-    // =========================================================================
     // Phase L — IR merging
     // =========================================================================
 

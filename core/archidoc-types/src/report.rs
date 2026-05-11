@@ -1,5 +1,44 @@
 use serde::{Deserialize, Serialize};
 
+// ---------------------------------------------------------------------------
+// Annotation coverage
+// ---------------------------------------------------------------------------
+
+/// Classification of a directory's annotation state, derived from IR fields.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AnnotationStatus {
+    /// No annotation file or @c4 marker.
+    None,
+    /// Annotation exists but description is missing or still a TODO placeholder.
+    Stub,
+    /// Annotation exists with a real description.
+    Populated,
+}
+
+/// Aggregated annotation coverage across all directories in an IR.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CoverageReport {
+    pub total_dirs: usize,
+    pub annotated_count: usize,
+    pub stub_count: usize,
+    pub populated_count: usize,
+    pub unannotated_count: usize,
+    pub coverage_percent: f64,
+    pub per_dir: Vec<DirCoverage>,
+}
+
+/// Per-directory annotation status.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DirCoverage {
+    pub path: String,
+    pub status: AnnotationStatus,
+}
+
+// ---------------------------------------------------------------------------
+// Health
+// ---------------------------------------------------------------------------
+
 /// Aggregated health report across all architectural elements.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HealthReport {

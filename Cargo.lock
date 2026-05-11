@@ -60,7 +60,7 @@ checksum = "5f0e0fee31ef5ed1ba1316088939cea399010ed7731dba877ed44aeb407a75ea"
 
 [[package]]
 name = "archidoc-cli"
-version = "0.3.4"
+version = "0.5.0"
 dependencies = [
  "archidoc-engine",
  "archidoc-rust",
@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "archidoc-engine"
-version = "0.3.4"
+version = "0.5.0"
 dependencies = [
  "archidoc-types",
  "pathdiff",
@@ -84,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "archidoc-rust"
-version = "0.3.4"
+version = "0.5.0"
 dependencies = [
  "archidoc-types",
  "quote",
@@ -105,7 +105,7 @@ dependencies = [
 
 [[package]]
 name = "archidoc-types"
-version = "0.3.4"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",

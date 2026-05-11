@@ -1,199 +1,475 @@
 use std::fs;
-use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
+
+// ===========================================================================
+// CLI definition — noun-first convention
+// ===========================================================================
 
 #[derive(Parser)]
 #[command(name = "archidoc")]
-#[command(about = "Architecture documentation compiler", long_about = None)]
 #[command(version)]
+#[command(about = "\
+Architecture documentation compiler — deterministic JSON metadata for directories.
+
+Archidoc converts any file directory into a structured JSON representation
+(ArchitectureIR) that LLMs and tools can consume instantly — no searching
+the filesystem each time. It also creates directories deterministically
+from JSON templates, so your architecture plans become executable.
+
+What it does:
+  1. UNDERSTAND  Scan any directory → JSON snapshot of structure + strategy + health
+  2. CREATE      Instantiate directory structures from JSON scaffold templates
+  3. ANNOTATE    Add strategy metadata (@c4 level, purpose, patterns) to directories
+  4. VALIDATE    Catch architectural drift — diff design intent vs implementation
+
+For greenfield projects:
+  archidoc ir compile . --design           declare target architecture
+  archidoc scaffold create project --var   create structure from template
+  archidoc ir validate arch.json curr.json ensure implementation tracks design
+
+For brownfield projects:
+  archidoc ir compile .                    snapshot existing structure → JSON
+  archidoc ir render ai-structure .        instant LLM-ready project summary
+  archidoc annotate md . --recursive       add strategy metadata to all dirs
+
+Commands (noun-first):
+  ir compile [path]                        scan → current.json (or --design → architecture.json)
+  ir render <format> <source>              render docs from IR or directory
+  ir validate <architecture> <current>     diff target vs actual IR
+  ir ls <path> [--depth N]                 list IR directory children (no rescan)
+  ir describe <path>                       full details for one IR directory
+  ir query [--annotated] [--empty]...      filter IR directories by state
+  scaffold compile <template-dir>          folder template → ScaffoldIR JSON
+  scaffold create <name> [--var k=v]       instantiate a scaffold template
+  scaffold list                            list available templates
+  scaffold inspect <name>                  show template metadata
+  annotate <lang> [dir]                    add @c4 entry points (rs|ts|js|md)
+  annotate --coverage [dir]                show annotation coverage report
+
+Render formats (AI — for LLM consumption):
+  ai-files       every file per dir, explicit       for grep/search/file discovery
+  ai-structure   compressed tree + strategy + health for cold-start onboarding
+  ai-strategy    module narrative + relationships    for architecture decisions
+
+Render formats (Human — for review):
+  human-strategy → ARCHITECTURE.md                  full doc with diagrams
+  human-structure                                    structure overview (reserved)
+
+Render formats (Diagrams):
+  plantuml       → diagrams/c4.puml                 PlantUML C4 diagrams
+  drawio         → diagrams/c4.drawio.csv           draw.io CSV import
+
+Quick start:
+  archidoc ir compile .                    scan → _context/current.json
+  archidoc ir render ai-structure .        instant LLM context (one step)
+  archidoc ir render human-strategy _context/current.json
+")]
+#[command(arg_required_else_help = true)]
 struct Cli {
-    /// Path to project root (defaults to current directory)
-    path: Option<PathBuf>,
-
-    #[command(flatten)]
-    global: GlobalOpts,
-
     #[command(subcommand)]
-    command: Option<Commands>,
-}
-
-#[derive(Args)]
-struct GlobalOpts {
-    /// Output path for generated ARCHITECTURE.md
-    #[arg(short, long, default_value = "_context/ARCHITECTURE.md")]
-    output: PathBuf,
-
-    /// Suppress informational output (only errors and requested output)
-    #[arg(short, long, conflicts_with = "verbose")]
-    quiet: bool,
-
-    /// Show verbose output with extra processing details
-    #[arg(short, long)]
-    verbose: bool,
-
-    /// Output machine-readable JSON (for --health, --validate, --check)
-    #[arg(long)]
-    json: bool,
-
-    /// Check for documentation drift (exit 1 if stale)
-    #[arg(long)]
-    check: bool,
-
-    /// Print architecture health report
-    #[arg(long)]
-    health: bool,
-
-    /// Validate file tables against filesystem
-    #[arg(long)]
-    validate: bool,
-
-    /// Output JSON IR to stdout
-    #[arg(long)]
-    emit_ir: bool,
-
-    /// Also generate PlantUML diagram files
-    #[arg(long)]
-    plantuml: bool,
-
-    /// Also generate draw.io CSV files
-    #[arg(long)]
-    drawio: bool,
-
-    /// Do not generate ARCHITECTURE.ai.md
-    #[arg(long)]
-    no_ai: bool,
-
-    /// Read JSON IR from stdin and generate docs
-    #[arg(long, conflicts_with = "from_json_file")]
-    from_json: bool,
-
-    /// Read JSON IR from file(s) and generate docs
-    #[arg(long, conflicts_with = "from_json")]
-    from_json_file: Vec<PathBuf>,
-
-    /// Validate JSON IR (from stdin or --from-json-file)
-    #[arg(long)]
-    validate_ir: bool,
-
-    /// Merge multiple IR files (use with multiple --from-json-file; requires --merge-ir)
-    #[arg(long)]
-    merge_ir: bool,
+    command: Commands,
 }
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Generate a file from environment context
+    /// Work with Architecture IR — compile, render, validate, query
     ///
-    /// Reads the target directory, applies the named handler, and writes output.
-    /// Each handler reads project state and produces one or more files.
+    /// The IR (Intermediate Representation) is a structured JSON snapshot
+    /// of a directory's structure, strategy annotations, and health status.
+    ///
+    /// Subcommands:
+    ///   compile   scan directory → IR JSON
+    ///   render    IR or directory → documentation
+    ///   validate  diff design intent vs implementation
+    ///   ls        list directory children from compiled IR
+    ///   describe  full details for one directory from compiled IR
+    ///   query     filter directories by state from compiled IR
     ///
     /// Examples:
-    ///   archidoc init _index.md ./src/              # generate _index.md for all dirs missing one
-    ///   archidoc init _index.md ./src/ --dry-run    # list missing dirs (was: audit)
-    ///   archidoc init c4-annotation ./src/api/      # generate @c4 stub (was: suggest)
-    ///   archidoc init root-annotation .             # generate root template
-    ///   archidoc init tree .                        # generate dir tree (was: tree)
-    ///   archidoc init tree . --files --human        # tree variants
-    ///   archidoc init --list                        # list available handlers
-    Init(InitFileArgs),
-    /// Create a project from a folder template
+    ///   archidoc ir compile .
+    ///   archidoc ir render ai-structure .
+    ///   archidoc ir validate _context/architecture.json _context/current.json
+    ///   archidoc ir ls . --depth 2
+    ///   archidoc ir describe src/api
+    ///   archidoc ir query --empty
+    Ir(IrArgs),
+
+    /// Work with scaffold templates — compile, create, list, inspect
     ///
-    /// Copies a named template tree from `.archidoc/scaffold-templates/<name>/`
-    /// to the target directory, substituting `{{variable}}` tokens in paths and file contents.
+    /// Scaffold templates are JSON definitions that create directory structures
+    /// with {{variable}} substitution.
     ///
-    /// Templates are discovered by walking up the directory tree — firm-level templates
-    /// at a workspace root are available from any subdirectory.
+    /// Subcommands:
+    ///   compile   folder template → ScaffoldIR JSON
+    ///   create    instantiate a template into directories
+    ///   list      show available templates
+    ///   inspect   show template metadata and variables
     ///
-    /// Three built-in templates bootstrap .archidoc/ (work before it exists):
-    ///   archidoc scaffold custom-scaffolds       # create scaffold-templates/ dir
-    ///   archidoc scaffold custom-inits           # create init-overrides/ with defaults
-    ///   archidoc scaffold custom-trees           # create config.tree.json
+    /// Examples:
+    ///   archidoc scaffold compile .archidoc/scaffold-templates/firm/
+    ///   archidoc scaffold create client --var client_name=Acme
+    ///   archidoc scaffold list
+    ///   archidoc scaffold inspect client
+    Scaffold(ScaffoldArgs),
+
+    /// Add @c4 annotation entry points to directories
     ///
-    /// User template examples:
-    ///   archidoc scaffold --list
-    ///   archidoc scaffold client --inspect
-    ///   archidoc scaffold client --dry-run --var client_name=Test
-    ///   archidoc scaffold client --target ./clients/Acme --var client_name=Acme
-    Scaffold(NewArgs),
+    /// Usage: archidoc annotate <lang> [dir] [--recursive] [--dry-run] [--force]
+    ///        archidoc annotate --coverage [dir|file.json] [--depth N]
+    ///
+    /// Creates the language-appropriate entry file (mod.rs, index.ts, _index.md)
+    /// with a @c4 header and file table pre-populated from the directory contents.
+    ///
+    /// Languages: rs, ts, js, md
+    ///
+    /// Examples:
+    ///   archidoc annotate rs ./src/auth/
+    ///   archidoc annotate ts ./src/api/
+    ///   archidoc annotate md . --recursive
+    ///   archidoc annotate md . --recursive --depth 2
+    ///   archidoc annotate rs ./src/ --dry-run
+    ///   archidoc annotate rs ./src/ --force
+    ///   archidoc annotate --coverage .
+    ///   archidoc annotate --coverage _context/current.json
+    ///   archidoc annotate --coverage . --depth 2
+    Annotate(AnnotateArgs),
 }
 
+// ---------------------------------------------------------------------------
+// IR args
+// ---------------------------------------------------------------------------
+
 #[derive(Args)]
-struct NewArgs {
-    /// Template name (folder name in scaffold-templates/)
-    name: Option<String>,
+struct IrArgs {
+    #[command(subcommand)]
+    command: IrCommand,
+}
 
-    /// Target directory (defaults to current directory)
-    #[arg(long, short = 't')]
-    target: Option<PathBuf>,
+#[derive(Subcommand)]
+enum IrCommand {
+    /// Scan source annotations + directory tree → ArchitectureIR JSON
+    ///
+    /// Outputs current.json (implementation state) by default.
+    /// With --design, outputs architecture.json (target truth, all health = planned).
+    /// Merges into an existing IR file if one is present at the output path.
+    ///
+    /// Examples:
+    ///   archidoc ir compile .
+    ///   archidoc ir compile ./src --design
+    ///   archidoc ir compile . --output-dir _context
+    Compile {
+        /// Directory to scan (defaults to current directory)
+        path: Option<PathBuf>,
 
-    /// Variable assignment (repeatable): --var key=value
-    #[arg(long = "var", value_parser = parse_key_value)]
-    vars: Vec<(String, String)>,
+        /// Directory to write output into
+        #[arg(long, default_value = "_context")]
+        output_dir: PathBuf,
 
-    /// List available folder templates
-    #[arg(long, conflicts_with_all = ["name", "inspect", "dry_run"])]
-    list: bool,
+        /// Emit as architecture (target truth, all health = planned).
+        /// Writes to architecture.json instead of current.json.
+        #[arg(long)]
+        design: bool,
+    },
+
+    /// Render documentation from IR or directory
+    ///
+    /// <source> accepts a .json IR file or a directory path.
+    /// If a directory is given, it is scanned on the fly (no file written).
+    ///
+    /// Formats (AI — for LLM consumption):
+    ///   ai-files      → ai-files.md       every file listed explicitly per dir
+    ///   ai-structure  → ai-structure.md   directory tree + strategy + health
+    ///   ai-strategy   → ai-strategy.md    module narrative + relationships
+    ///
+    /// Formats (Human — for developer/stakeholder review):
+    ///   human-strategy   → ARCHITECTURE.md     full doc with Mermaid diagrams
+    ///   human-structure  → human-structure.md   (reserved for future use)
+    ///
+    /// Formats (Diagrams):
+    ///   plantuml  → diagrams/c4.puml         PlantUML C4 diagrams
+    ///   drawio    → diagrams/c4.drawio.csv   draw.io CSV import
+    ///
+    /// Examples:
+    ///   archidoc ir render ai-files ./src/
+    ///   archidoc ir render ai-structure .
+    ///   archidoc ir render ai-strategy _context/current.json
+    ///   archidoc ir render human-strategy _context/current.json
+    ///   archidoc ir render human-strategy _context/current.json --validate
+    ///   archidoc ir render plantuml _context/current.json
+    Render {
+        /// Output format
+        #[arg(value_enum)]
+        format: RenderFormat,
+
+        /// Source: path to a .json IR file, or a directory (auto-compiled)
+        source: PathBuf,
+
+        /// Directory to write rendered output into
+        #[arg(long, default_value = "_context")]
+        output_dir: PathBuf,
+
+        /// Maximum directory depth (ai-files and ai-structure formats)
+        #[arg(long)]
+        depth: Option<usize>,
+
+        /// Check for drift instead of writing (human-strategy format only).
+        /// Exits 1 on errors.
+        #[arg(long)]
+        validate: bool,
+
+        /// Treat warnings as errors when validating (requires --validate)
+        #[arg(long, requires = "validate")]
+        validate_strict: bool,
+    },
+
+    /// Validate architecture conformance (target vs actual)
+    ///
+    /// Compares two ArchitectureIR JSON files:
+    ///   <architecture>  the declared target truth (what SHOULD exist)
+    ///   <current>       the implementation state (what DOES exist on disk)
+    ///
+    /// Findings:
+    ///   UNIMPLEMENTED  in architecture but not in current
+    ///   UNDOCUMENTED   in current but not in architecture
+    ///   DIVERGED       same path but conflicting attributes
+    ///   REGRESSION     health moved backward
+    ///
+    /// Exit codes:
+    ///   0  no errors (warnings/infos may appear)
+    ///   1  errors found, or warnings found with --strict
+    ///
+    /// Examples:
+    ///   archidoc ir validate _context/architecture.json _context/current.json
+    ///   archidoc ir validate _context/architecture.json _context/current.json --strict
+    ///   archidoc ir validate _context/architecture.json _context/current.json --log
+    Validate {
+        /// Path to the architecture IR (target truth — what SHOULD exist)
+        architecture: PathBuf,
+
+        /// Path to the current IR (implementation state — what DOES exist on disk)
+        current: PathBuf,
+
+        /// Treat warnings as errors (exit 1 on any warning)
+        #[arg(long)]
+        strict: bool,
+
+        /// Show git log context for regressions and divergences
+        #[arg(long)]
+        log: bool,
+    },
+
+    /// List directory children from compiled IR (no rescan)
+    ///
+    /// Reads from _context/current.json by default.
+    ///
+    /// Examples:
+    ///   archidoc ir ls . --depth 2
+    ///   archidoc ir ls src/api
+    ///   archidoc ir ls . --ir-path _context/architecture.json
+    Ls {
+        /// Directory path to list (use "." for root)
+        path: String,
+
+        /// How many levels deep to show
+        #[arg(long, default_value = "1")]
+        depth: usize,
+
+        /// Path to IR JSON file (default: _context/current.json)
+        #[arg(long)]
+        ir_path: Option<PathBuf>,
+    },
+
+    /// Show full details for one directory from compiled IR (no rescan)
+    ///
+    /// Examples:
+    ///   archidoc ir describe src/api
+    ///   archidoc ir describe . --ir-path _context/architecture.json
+    Describe {
+        /// Directory path to describe
+        path: String,
+
+        /// Path to IR JSON file (default: _context/current.json)
+        #[arg(long)]
+        ir_path: Option<PathBuf>,
+    },
+
+    /// Filter directories by state from compiled IR (no rescan)
+    ///
+    /// Multiple flags combine with AND logic. No flags = list all.
+    ///
+    /// Examples:
+    ///   archidoc ir query --empty
+    ///   archidoc ir query --populated --annotated
+    ///   archidoc ir query --scaffold
+    Query {
+        /// Show only empty directories (no files, no annotated children)
+        #[arg(long)]
+        empty: bool,
+
+        /// Show only directories that contain files
+        #[arg(long)]
+        populated: bool,
+
+        /// Show only scaffold directories (files but no health/purpose)
+        #[arg(long)]
+        scaffold: bool,
+
+        /// Show only annotated directories (have @c4 metadata)
+        #[arg(long)]
+        annotated: bool,
+
+        /// Path to IR JSON file (default: _context/current.json)
+        #[arg(long)]
+        ir_path: Option<PathBuf>,
+    },
+}
+
+// ---------------------------------------------------------------------------
+// Scaffold args
+// ---------------------------------------------------------------------------
+
+#[derive(Args)]
+struct ScaffoldArgs {
+    #[command(subcommand)]
+    command: ScaffoldCommand,
+}
+
+#[derive(Subcommand)]
+enum ScaffoldCommand {
+    /// Convert a folder template directory → ScaffoldIR JSON
+    ///
+    /// Reads .archidoc-template.toml for metadata if present.
+    /// Auto-detects {{variable}} patterns in file contents.
+    /// Output: <output-dir>/scaffolds/<name>.json
+    ///
+    /// Examples:
+    ///   archidoc scaffold compile .archidoc/scaffold-templates/firm/
+    ///   archidoc scaffold compile ./my-template/ --output-dir .archidoc
+    Compile {
+        /// Template directory to compile
+        path: PathBuf,
+
+        /// Directory to write output into
+        #[arg(long, default_value = "_context")]
+        output_dir: PathBuf,
+    },
+
+    /// Instantiate a scaffold template into directories
+    ///
+    /// Looks up a ScaffoldIR JSON template by name and creates the directory
+    /// structure with {{variable}} substitution.
+    ///
+    /// Template lookup order:
+    ///   1. Built-in templates (custom-scaffolds, custom-inits, custom-trees)
+    ///   2. .archidoc/scaffolds/<name>.json (walk up from cwd, nearest wins)
+    ///   3. Direct path if <name> ends in .json or contains / or \
+    ///
+    /// Examples:
+    ///   archidoc scaffold create client --var client_name=Acme
+    ///   archidoc scaffold create project --dry-run --var engagement_name=Test
+    ///   archidoc scaffold create ./path/to/template.json --var name=foo
+    ///   archidoc scaffold create client -t ./output --var client_name=Acme --force
+    Create {
+        /// Template name, or path to a .json ScaffoldIR file
+        name: String,
+
+        /// Target directory (defaults to current directory)
+        #[arg(long, short = 't')]
+        target: Option<PathBuf>,
+
+        /// Variable assignment (repeatable): --var key=value
+        #[arg(long = "var", value_parser = parse_key_value)]
+        vars: Vec<(String, String)>,
+
+        /// Show what would be created without writing anything
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Overwrite existing files
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// List available scaffold templates
+    ///
+    /// Shows built-in templates and any .archidoc/scaffolds/*.json found
+    /// by walking up from the current directory.
+    ///
+    /// Example:
+    ///   archidoc scaffold list
+    List,
 
     /// Show template metadata and required variables
-    #[arg(long)]
-    inspect: bool,
-
-    /// Show what would be created without writing anything
-    #[arg(long)]
-    dry_run: bool,
-
-    /// Overwrite existing files
-    #[arg(long)]
-    force: bool,
+    ///
+    /// Examples:
+    ///   archidoc scaffold inspect client
+    ///   archidoc scaffold inspect ./path/to/template.json
+    Inspect {
+        /// Template name, or path to a .json ScaffoldIR file
+        name: String,
+    },
 }
 
+// ---------------------------------------------------------------------------
+// Render format enum (shared)
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum RenderFormat {
+    /// Every file listed explicitly per directory — for LLM grep/search (ai-files.md)
+    #[value(name = "ai-files")]
+    AiFiles,
+    /// Compressed tree + strategy annotations + health — for LLM cold-start (ai-structure.md)
+    #[value(name = "ai-structure")]
+    AiStructure,
+    /// Module narrative + relationships — for LLM architecture decisions (ai-strategy.md)
+    #[value(name = "ai-strategy")]
+    AiStrategy,
+    /// Full human-readable doc with Mermaid diagrams (ARCHITECTURE.md)
+    #[value(name = "human-strategy")]
+    HumanStrategy,
+    /// Human-readable structure overview (human-structure.md) — reserved
+    #[value(name = "human-structure")]
+    HumanStructure,
+    /// PlantUML C4 diagrams (diagrams/c4.puml)
+    Plantuml,
+    /// draw.io CSV import (diagrams/c4.drawio.csv)
+    Drawio,
+}
+
+// ---------------------------------------------------------------------------
+// Annotate args (unchanged)
+// ---------------------------------------------------------------------------
+
 #[derive(Args)]
-struct InitFileArgs {
-    /// Handler name (e.g., _index.md, c4-annotation, root-annotation, tree)
-    name: Option<String>,
-
-    /// Target directory (defaults to current directory)
-    target: Option<PathBuf>,
-
-    /// List available init handlers
-    #[arg(long)]
-    list: bool,
-
-    /// Show what would be generated without writing
-    #[arg(long)]
-    dry_run: bool,
-
-    /// Variable assignment (repeatable): --var key=value
-    #[arg(long = "var", value_parser = parse_key_value)]
-    vars: Vec<(String, String)>,
-
-    // -- Handler-specific flags (passed through to handlers) --
-
-    /// Include files in tree output (tree handler)
-    #[arg(long)]
-    files: bool,
-
-    /// Generate human-readable tree with icons (tree handler)
-    #[arg(long)]
-    human: bool,
-
-    /// Generate both AI dir and dir+files tree variants (tree handler)
-    #[arg(long)]
-    both: bool,
-
-    /// Maximum traversal depth (tree handler)
-    #[arg(long)]
-    depth: Option<usize>,
-
-    /// Language for comment syntax: rust, ts (root-annotation handler)
-    #[arg(long)]
+struct AnnotateArgs {
+    /// Language: rs, ts, js, md (not required with --coverage)
     lang: Option<String>,
 
-    /// Output directory for generated files (tree handler, defaults to _context/)
+    /// Target directory or .json IR file (defaults to current directory)
+    path: Option<PathBuf>,
+
+    /// Annotate all subdirectories within the target as well
     #[arg(long)]
-    out: Option<PathBuf>,
+    recursive: bool,
+
+    /// Show what would be written without writing anything
+    #[arg(long, conflicts_with = "coverage")]
+    dry_run: bool,
+
+    /// Overwrite existing annotations (prepend to rs/ts/js, overwrite for md)
+    #[arg(long, conflicts_with = "coverage")]
+    force: bool,
+
+    /// Show annotation coverage report instead of annotating
+    #[arg(long)]
+    coverage: bool,
+
+    /// Maximum directory depth for recursive operations and coverage
+    #[arg(long)]
+    depth: Option<usize>,
 }
 
 fn parse_key_value(s: &str) -> Result<(String, String), String> {
@@ -203,862 +479,849 @@ fn parse_key_value(s: &str) -> Result<(String, String), String> {
     Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
 }
 
+// ===========================================================================
+// Main dispatch
+// ===========================================================================
+
 fn main() {
     let cli = Cli::parse();
-
-    // Handle subcommands first
-    if let Some(command) = cli.command {
-        match command {
-            Commands::Init(args) => {
-                run_init_file(args);
-                return;
-            }
-            Commands::Scaffold(args) => {
-                run_new(args);
-                return;
-            }
-        }
-    }
-
-    // Determine mode from flags
-    let mode = if cli.global.validate_ir {
-        Mode::ValidateIr
-    } else if cli.global.from_json {
-        Mode::FromJsonStdin
-    } else if !cli.global.from_json_file.is_empty() {
-        if cli.global.merge_ir {
-            Mode::MergeIr
-        } else {
-            Mode::FromJsonFile
-        }
-    } else if cli.global.check {
-        Mode::Check
-    } else if cli.global.health {
-        Mode::Health
-    } else if cli.global.validate {
-        Mode::Validate
-    } else if cli.global.emit_ir {
-        Mode::EmitIr
-    } else {
-        Mode::Generate
-    };
-
-    let verbosity = if cli.global.quiet {
-        Verbosity::Quiet
-    } else if cli.global.verbose {
-        Verbosity::Verbose
-    } else {
-        Verbosity::Normal
-    };
-
-    // Load custom templates once from CWD — used by suggest and generate
-    let cwd = std::env::current_dir().expect("failed to get current directory");
-    let custom = archidoc_engine::custom::CustomTemplates::load(&cwd);
-    let table_columns = custom
-        .architecture_table
-        .as_deref()
-        .map(archidoc_engine::custom::parse_table_columns)
-        .unwrap_or_default();
-
-    // Execute mode
-    match mode {
-        Mode::FromJsonStdin => {
-            let docs = read_ir_from_stdin();
-            let root = cli
-                .path
-                .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
-            run_generate(&root, &docs, &cli.global, verbosity, &table_columns);
-        }
-        Mode::FromJsonFile => {
-            let path = &cli.global.from_json_file[0];
-            let docs = read_ir_from_file(path);
-            let root = cli
-                .path
-                .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
-            run_generate(&root, &docs, &cli.global, verbosity, &table_columns);
-        }
-        Mode::MergeIr => {
-            if cli.global.from_json_file.len() < 2 {
-                eprintln!("error: --merge-ir requires at least 2 --from-json-file arguments");
-                std::process::exit(1);
-            }
-            let ir_sets: Vec<Vec<archidoc_types::ModuleDoc>> = cli
-                .global
-                .from_json_file
-                .iter()
-                .map(|p| read_ir_from_file(p))
-                .collect();
-            let docs = archidoc_engine::merge::merge_ir(ir_sets).unwrap_or_else(|e| {
-                eprintln!("error: {}", e);
-                std::process::exit(1);
-            });
-            let root = cli
-                .path
-                .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
-            run_generate(&root, &docs, &cli.global, verbosity, &table_columns);
-        }
-        Mode::ValidateIr => {
-            let json = if !cli.global.from_json_file.is_empty() {
-                let path = &cli.global.from_json_file[0];
-                fs::read_to_string(path).unwrap_or_else(|e| {
-                    eprintln!("error: failed to read {}: {}", path.display(), e);
-                    std::process::exit(1);
-                })
-            } else {
-                let mut buf = String::new();
-                std::io::stdin()
-                    .read_to_string(&mut buf)
-                    .expect("failed to read from stdin");
-                buf
-            };
-            run_validate_ir(&json);
-        }
-        _ => {
-            // Modes that parse from source need a root directory
-            let root = cli
-                .path
-                .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
-
-            if !root.exists() {
-                eprintln!("error: path does not exist: {}", root.display());
-                std::process::exit(1);
-            }
-
-            let docs = collect_all_docs(&root, verbosity);
-
-            match mode {
-                Mode::Generate => run_generate(&root, &docs, &cli.global, verbosity, &table_columns),
-                Mode::Check => run_check(&root, &docs, &cli.global.output, cli.global.json),
-                Mode::Health => run_health(&docs, cli.global.json),
-                Mode::Validate => run_validate(&docs, cli.global.json),
-                Mode::EmitIr => run_emit_ir(&docs),
-                _ => unreachable!(),
-            }
-        }
+    match cli.command {
+        Commands::Ir(args) => run_ir(args),
+        Commands::Scaffold(args) => run_scaffold(args),
+        Commands::Annotate(args) => run_annotate(args),
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Mode {
-    Generate,
-    Check,
-    Health,
-    Validate,
-    EmitIr,
-    FromJsonStdin,
-    FromJsonFile,
-    MergeIr,
-    ValidateIr,
-}
+// ===========================================================================
+// IR command
+// ===========================================================================
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Verbosity {
-    Quiet,
-    Normal,
-    Verbose,
-}
-
-fn run_generate(
-    root: &PathBuf,
-    docs: &[archidoc_types::ModuleDoc],
-    opts: &GlobalOpts,
-    verbosity: Verbosity,
-    columns: &[String],
-) {
-    // Make root absolute without canonicalize — canonicalize produces UNC paths
-    // on Windows (\\?\C:\...) which pathdiff cannot diff against regular paths
-    // (C:\...) emitted by Node's path.resolve(). Just join with CWD instead.
-    let root = &if root.is_absolute() {
-        root.clone()
-    } else {
-        std::env::current_dir()
-            .expect("failed to get current directory")
-            .join(root)
-    };
-    if verbosity != Verbosity::Quiet {
-        println!("archidoc: {} modules", docs.len());
-    }
-
-    if docs.is_empty() {
-        if verbosity != Verbosity::Quiet {
-            println!("  no annotated modules found");
-            println!();
-            println!("To get started:");
-            println!("  1. Add @c4 annotations to your module entry files (mod.rs, index.ts)");
-            println!("  2. Run `archidoc suggest <dir>` to generate a template for a directory");
-            println!("  3. See https://github.com/archidoc/archidoc#getting-started");
+fn run_ir(args: IrArgs) {
+    match args.command {
+        IrCommand::Compile { path, output_dir, design } => {
+            run_ir_compile(path, output_dir, design);
         }
-        return;
-    }
-
-    // Generate single ARCHITECTURE.md
-    let output_path = if opts.output.is_absolute() {
-        opts.output.clone()
-    } else {
-        root.join(&opts.output)
-    };
-    let link_base = output_path.parent().unwrap_or(root.as_path());
-    let content = archidoc_engine::architecture::generate(docs, link_base, columns);
-
-    if let Some(parent) = output_path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent).expect("failed to create output directory");
+        IrCommand::Render { format, source, output_dir, depth, validate, validate_strict } => {
+            run_ir_render(format, source, output_dir, depth, validate, validate_strict);
         }
-    }
-    fs::write(&output_path, &content).unwrap_or_else(|e| {
-        eprintln!("error: failed to write {}: {}", output_path.display(), e);
-        std::process::exit(1);
-    });
-
-    if verbosity != Verbosity::Quiet {
-        println!("wrote {}", output_path.display());
-    }
-
-    // AI context (default on, --no-ai to skip)
-    if !opts.no_ai {
-        let stem = output_path
-            .file_stem()
-            .unwrap()
-            .to_string_lossy();
-        let ai_path = output_path.with_file_name(format!("{}.ai.md", stem));
-        let ai_content = archidoc_engine::ai_context::generate(docs);
-        fs::write(&ai_path, &ai_content).unwrap_or_else(|e| {
-            eprintln!("error: failed to write {}: {}", ai_path.display(), e);
-            std::process::exit(1);
-        });
-        if verbosity != Verbosity::Quiet {
-            println!("wrote {}", ai_path.display());
+        IrCommand::Validate { architecture, current, strict, log } => {
+            run_ir_validate(architecture, current, strict, log);
         }
-    }
-
-    // Optional sidecar outputs
-    if opts.plantuml || opts.drawio {
-        let sidecar_dir = output_path.parent().unwrap_or(root);
-        let c4_dir = sidecar_dir.join("c4");
-        fs::create_dir_all(&c4_dir).expect("failed to create c4 dir");
-
-        if opts.plantuml {
-            archidoc_engine::plantuml::generate_container(&c4_dir, docs);
-            archidoc_engine::plantuml::generate_component(&c4_dir, docs);
-            if verbosity == Verbosity::Verbose {
-                println!("wrote PlantUML files to {}", c4_dir.display());
-            }
-        }
-
-        if opts.drawio {
-            let drawio_dir = sidecar_dir.join("drawio");
-            fs::create_dir_all(&drawio_dir).expect("failed to create drawio dir");
-            archidoc_engine::drawio::generate_container_csv(&drawio_dir, docs);
-            archidoc_engine::drawio::generate_component_csv(&drawio_dir, docs);
-            if verbosity == Verbosity::Verbose {
-                println!("wrote draw.io CSV files to {}", drawio_dir.display());
-            }
-        }
-    }
-}
-
-fn run_check(root: &PathBuf, docs: &[archidoc_types::ModuleDoc], output_path: &PathBuf, json: bool) {
-    let arch_file = if output_path.is_absolute() {
-        output_path.clone()
-    } else {
-        root.join(output_path)
-    };
-    let link_base = arch_file.parent().unwrap_or(root.as_path());
-    let report = archidoc_engine::check::check_drift(docs, &arch_file, link_base);
-
-    if json {
-        let json_output = serde_json::to_string_pretty(&report).expect("failed to serialize report");
-        println!("{}", json_output);
-    } else {
-        let text = archidoc_engine::check::format_drift_report(&report);
-        print!("{}", text);
-    }
-
-    if report.has_drift() {
-        std::process::exit(1);
-    }
-}
-
-fn run_health(docs: &[archidoc_types::ModuleDoc], json: bool) {
-    let report = archidoc_engine::health::aggregate_health(docs);
-
-    if json {
-        let json_output = serde_json::to_string_pretty(&report).expect("failed to serialize report");
-        println!("{}", json_output);
-    } else {
-        let text = archidoc_engine::health::format_health_report(&report);
-        print!("{}", text);
-    }
-}
-
-fn run_validate(docs: &[archidoc_types::ModuleDoc], json: bool) {
-    let report = archidoc_engine::validate::validate_file_tables(docs);
-
-    if json {
-        let json_output = serde_json::to_string_pretty(&report).expect("failed to serialize report");
-        println!("{}", json_output);
-    } else {
-        let text = archidoc_engine::validate::format_validation_report(&report);
-        print!("{}", text);
-    }
-
-    if !report.is_clean() {
-        std::process::exit(1);
-    }
-}
-
-fn run_emit_ir(docs: &[archidoc_types::ModuleDoc]) {
-    let json = archidoc_engine::ir::serialize(docs);
-    println!("{}", json);
-}
-
-fn read_ir_from_stdin() -> Vec<archidoc_types::ModuleDoc> {
-    let mut json = String::new();
-    std::io::stdin()
-        .read_to_string(&mut json)
-        .expect("failed to read JSON IR from stdin");
-    archidoc_engine::ir::deserialize(&json).unwrap_or_else(|e| {
-        eprintln!("error: {}", e);
-        std::process::exit(1);
-    })
-}
-
-fn read_ir_from_file(path: &PathBuf) -> Vec<archidoc_types::ModuleDoc> {
-    let json = fs::read_to_string(path).unwrap_or_else(|e| {
-        eprintln!("error: failed to read {}: {}", path.display(), e);
-        std::process::exit(1);
-    });
-    archidoc_engine::ir::deserialize(&json).unwrap_or_else(|e| {
-        eprintln!("error: {}", e);
-        std::process::exit(1);
-    })
-}
-
-fn run_validate_ir(json: &str) {
-    match archidoc_engine::ir::validate(json) {
-        Ok(()) => println!("IR is valid."),
-        Err(e) => {
-            eprintln!("{}", e);
-            std::process::exit(1);
-        }
-    }
-}
-
-fn run_init_file(args: InitFileArgs) {
-    use archidoc_engine::init_cmd;
-
-    if args.list {
-        let handlers = init_cmd::all_handlers();
-        println!("available init handlers:");
-        println!();
-        for handler in &handlers {
-            let dry_run_note = if handler.supports_dry_run() {
-                " (supports --dry-run)"
-            } else {
-                ""
-            };
-            println!("  {}{}", handler.name(), dry_run_note);
-            println!("    {}", handler.description());
-            println!();
-        }
-        return;
-    }
-
-    let Some(name) = &args.name else {
-        eprintln!("error: provide a handler name or use --list");
-        std::process::exit(1);
-    };
-
-    let handler = match init_cmd::find_handler(name) {
-        Some(h) => h,
-        None => {
-            eprintln!("error: unknown init handler '{}'", name);
-            eprintln!();
-            eprintln!("run `archidoc init-file --list` to see available handlers.");
-            std::process::exit(1);
-        }
-    };
-
-    let cwd = std::env::current_dir().expect("failed to get current directory");
-    let target = args.target.unwrap_or_else(|| cwd.clone());
-    let target = if target.is_absolute() {
-        target
-    } else {
-        cwd.join(target)
-    };
-
-    let vars: std::collections::BTreeMap<String, String> =
-        args.vars.into_iter().collect();
-
-    let extra_args = archidoc_engine::init_cmd::HandlerArgs {
-        files: args.files,
-        human: args.human,
-        both: args.both,
-        depth: args.depth,
-        lang: args.lang,
-        out: args.out,
-    };
-
-    // Dry-run mode
-    if args.dry_run {
-        if handler.supports_dry_run() {
-            match handler.dry_run(&target, &vars, &extra_args) {
-                Ok(items) => {
-                    if items.is_empty() {
-                        println!("nothing to do.");
-                    } else {
-                        println!("would generate ({} items):", items.len());
-                        println!();
-                        for item in &items {
-                            println!("  {}", item);
-                        }
-                    }
-                }
+        IrCommand::Ls { path, depth, ir_path } => {
+            let ir = load_ir_default(ir_path);
+            match archidoc_engine::ir_query::ls(&ir, &path, depth) {
+                Ok(output) => print!("{}", output),
                 Err(e) => {
                     eprintln!("error: {}", e);
                     std::process::exit(1);
                 }
             }
-        } else {
-            eprintln!("error: handler '{}' does not support --dry-run", name);
-            std::process::exit(1);
         }
-        return;
-    }
-
-    // Generate
-    match handler.generate(&target, &vars, &extra_args) {
-        Ok(outputs) => {
-            if outputs.is_empty() {
-                println!("nothing to generate.");
-                return;
-            }
-
-            for output in &outputs {
-                if output.path.to_string_lossy() == "-" {
-                    // stdout sentinel — print directly
-                    print!("{}", output.contents);
-                } else {
-                    // Write to file
-                    if let Some(parent) = output.path.parent() {
-                        if !parent.exists() {
-                            if let Err(e) = fs::create_dir_all(parent) {
-                                eprintln!("error: failed to create {}: {}", parent.display(), e);
-                                std::process::exit(1);
-                            }
-                        }
-                    }
-                    match fs::write(&output.path, &output.contents) {
-                        Ok(_) => {
-                            let display = output
-                                .path
-                                .strip_prefix(&target)
-                                .unwrap_or(&output.path);
-                            println!("wrote {}", display.display());
-                        }
-                        Err(e) => {
-                            eprintln!(
-                                "error: failed to write {}: {}",
-                                output.path.display(),
-                                e
-                            );
-                            std::process::exit(1);
-                        }
-                    }
+        IrCommand::Describe { path, ir_path } => {
+            let ir = load_ir_default(ir_path);
+            match archidoc_engine::ir_query::describe(&ir, &path) {
+                Ok(output) => print!("{}", output),
+                Err(e) => {
+                    eprintln!("error: {}", e);
+                    std::process::exit(1);
                 }
             }
         }
-        Err(e) => {
-            eprintln!("error: {}", e);
-            std::process::exit(1);
+        IrCommand::Query { empty, populated, scaffold, annotated, ir_path } => {
+            let ir = load_ir_default(ir_path);
+            let filter = archidoc_engine::ir_query::QueryFilter {
+                empty,
+                populated,
+                scaffold,
+                annotated,
+            };
+            print!("{}", archidoc_engine::ir_query::query(&ir, &filter));
         }
     }
 }
 
-fn run_new(args: NewArgs) {
-    use archidoc_engine::folder_scaffold;
+fn run_ir_compile(path: Option<PathBuf>, output_dir: PathBuf, design: bool) {
+    let base = cwd();
+    let scan_root = path
+        .map(|p| resolve_path(&base, &p))
+        .unwrap_or(base.clone());
 
-    let cwd = std::env::current_dir().expect("failed to get current directory");
+    if !scan_root.exists() {
+        eprintln!("error: path does not exist: {}", scan_root.display());
+        std::process::exit(1);
+    }
 
-    if args.list {
-        let disk_templates = folder_scaffold::list_templates(&cwd);
-        let disk_names: Vec<&str> = disk_templates.iter().map(|(n, _, _)| n.as_str()).collect();
+    let output_dir = resolve_path(&base, &output_dir);
 
-        let has_any = !disk_templates.is_empty() || !folder_scaffold::BUILTIN_NAMES.is_empty();
-        if !has_any {
-            println!("no folder templates found.");
-            return;
+    let modules = archidoc_rust::walker::extract_all_docs(&scan_root);
+    let config = archidoc_engine::tree::TreeConfig::load(&scan_root);
+    let incoming = archidoc_engine::ir_builder::build_from_scan(&scan_root, modules, &config);
+
+    let ir_filename = if design { "architecture.json" } else { "current.json" };
+    let ir_path = output_dir.join(ir_filename);
+    let merged = if ir_path.exists() {
+        match archidoc_types::ir::ArchitectureIR::load(&ir_path) {
+            Ok(existing) => match archidoc_engine::merge::merge_ir(existing, incoming) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprintln!("error: {}", e);
+                    std::process::exit(1);
+                }
+            },
+            Err(e) => {
+                eprintln!("warning: could not read existing IR ({}), overwriting", e);
+                incoming
+            }
         }
+    } else {
+        incoming
+    };
 
-        println!("available folder templates:");
-        println!();
+    let final_ir = if design {
+        stamp_design(merged)
+    } else {
+        merged
+    };
 
-        // Built-in templates first
-        for &builtin_name in folder_scaffold::BUILTIN_NAMES {
-            if disk_names.contains(&builtin_name) {
-                continue; // disk shadows built-in
-            }
-            if let Some(manifest) = folder_scaffold::builtin_manifest(builtin_name) {
-                println!("  {}  (built-in)", builtin_name);
-                println!("    {}", manifest.template.description);
-                println!();
-            }
-        }
+    if let Err(e) = final_ir.save(&ir_path) {
+        eprintln!("error: {}", e);
+        std::process::exit(1);
+    }
 
-        // Disk templates
-        for (name, path, manifest) in &disk_templates {
-            let rel = path.strip_prefix(&cwd).unwrap_or(path);
-            println!("  {}  (from {})", name, rel.display());
-            println!("    {}", manifest.template.description);
-            if !manifest.variables.is_empty() {
-                let var_names: Vec<&str> = manifest.variables.iter().map(|v| v.name.as_str()).collect();
-                println!("    vars: {}", var_names.join(", "));
-            }
-            println!();
+    let annotated_count = final_ir.annotated_dirs().len();
+    let label = if design { "architecture" } else { "current" };
+    println!(
+        "{} module{}, tree captured → {} ({})",
+        annotated_count,
+        if annotated_count == 1 { "" } else { "s" },
+        ir_path.display(),
+        label,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// IR render
+// ---------------------------------------------------------------------------
+
+/// Render configuration passed to every renderer function.
+struct RenderConfig<'a> {
+    ir: &'a archidoc_types::ir::ArchitectureIR,
+    output_dir: &'a Path,
+    depth: Option<usize>,
+    validate: bool,
+    validate_strict: bool,
+}
+
+/// Renderer function signature — every renderer has this shape.
+type RendererFn = fn(&RenderConfig);
+
+/// Declarative dispatch table: format → renderer function.
+///
+/// Adding a new output format = adding one line here + one function.
+const RENDERERS: &[(RenderFormat, RendererFn)] = &[
+    (RenderFormat::AiFiles,        render_ai_files),
+    (RenderFormat::AiStructure,    render_ai_structure),
+    (RenderFormat::AiStrategy,     render_ai_strategy),
+    (RenderFormat::HumanStrategy,  render_human_strategy),
+    (RenderFormat::HumanStructure, render_human_structure),
+    (RenderFormat::Plantuml,       render_plantuml),
+    (RenderFormat::Drawio,         render_drawio),
+];
+
+fn run_ir_render(
+    format: RenderFormat,
+    source: PathBuf,
+    output_dir: PathBuf,
+    depth: Option<usize>,
+    validate: bool,
+    validate_strict: bool,
+) {
+    let base = cwd();
+    let source = resolve_path(&base, &source);
+    let output_dir = resolve_path(&base, &output_dir);
+    let ir = resolve_source(&source);
+
+    fs::create_dir_all(&output_dir).unwrap_or_else(|e| {
+        eprintln!("error: failed to create output directory: {}", e);
+        std::process::exit(1);
+    });
+
+    let config = RenderConfig {
+        ir: &ir,
+        output_dir: &output_dir,
+        depth,
+        validate,
+        validate_strict,
+    };
+
+    let renderer = RENDERERS
+        .iter()
+        .find(|(fmt, _)| *fmt == format)
+        .map(|(_, f)| f)
+        .expect("all RenderFormat variants must be in RENDERERS table");
+
+    renderer(&config);
+}
+
+/// Load an ArchitectureIR from a JSON file or by scanning a directory.
+///
+/// If `source` is a directory: scan in-memory (no temp file written).
+/// If `source` is a file: load as JSON IR.
+fn resolve_source(source: &Path) -> archidoc_types::ir::ArchitectureIR {
+    if !source.exists() {
+        eprintln!("error: source does not exist: {}", source.display());
+        std::process::exit(1);
+    }
+
+    if source.is_dir() {
+        let modules = archidoc_rust::walker::extract_all_docs(source);
+        let config = archidoc_engine::tree::TreeConfig::load(source);
+        archidoc_engine::ir_builder::build_from_scan(source, modules, &config)
+    } else {
+        load_ir(source)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Renderer implementations — all share the same signature: fn(&RenderConfig)
+// ---------------------------------------------------------------------------
+
+fn render_ai_files(cfg: &RenderConfig) {
+    let content = archidoc_engine::filemap::generate(&cfg.ir.root, cfg.depth);
+    write_file(&cfg.output_dir.join("ai-files.md"), &content);
+}
+
+fn render_ai_structure(cfg: &RenderConfig) {
+    let content = archidoc_engine::context::generate(cfg.ir, cfg.depth);
+    write_file(&cfg.output_dir.join("ai-structure.md"), &content);
+}
+
+fn render_ai_strategy(cfg: &RenderConfig) {
+    let content = archidoc_engine::ai_context::generate(cfg.ir);
+    write_file(&cfg.output_dir.join("ai-strategy.md"), &content);
+}
+
+fn render_human_strategy(cfg: &RenderConfig) {
+    if cfg.validate {
+        let arch_file = cfg.output_dir.join("ARCHITECTURE.md");
+        let report = archidoc_engine::diagnostics::run(cfg.ir, &arch_file, cfg.output_dir);
+        print!("{}", report.format());
+        if report.should_fail(cfg.validate_strict) {
+            std::process::exit(1);
         }
         return;
     }
 
-    let Some(name) = &args.name else {
-        eprintln!("error: provide a template name or use --list");
+    let content = archidoc_engine::architecture::generate(cfg.ir, &[]);
+    write_file(&cfg.output_dir.join("ARCHITECTURE.md"), &content);
+}
+
+fn render_human_structure(cfg: &RenderConfig) {
+    let content = archidoc_engine::context::generate(cfg.ir, cfg.depth);
+    write_file(&cfg.output_dir.join("human-structure.md"), &content);
+}
+
+fn render_plantuml(cfg: &RenderConfig) {
+    let diagrams_dir = cfg.output_dir.join("diagrams");
+    fs::create_dir_all(&diagrams_dir).unwrap_or_else(|e| {
+        eprintln!("error: failed to create output directory: {}", e);
         std::process::exit(1);
+    });
+
+    archidoc_engine::plantuml::generate_container(&diagrams_dir, cfg.ir);
+    archidoc_engine::plantuml::generate_component(&diagrams_dir, cfg.ir);
+    println!("wrote PlantUML files to {}", diagrams_dir.display());
+}
+
+fn render_drawio(cfg: &RenderConfig) {
+    let diagrams_dir = cfg.output_dir.join("diagrams");
+    fs::create_dir_all(&diagrams_dir).unwrap_or_else(|e| {
+        eprintln!("error: failed to create output directory: {}", e);
+        std::process::exit(1);
+    });
+
+    archidoc_engine::drawio::generate_container_csv(&diagrams_dir, cfg.ir);
+    archidoc_engine::drawio::generate_component_csv(&diagrams_dir, cfg.ir);
+    println!("wrote draw.io CSV files to {}", diagrams_dir.display());
+}
+
+// ---------------------------------------------------------------------------
+// IR validate
+// ---------------------------------------------------------------------------
+
+fn run_ir_validate(architecture: PathBuf, current: PathBuf, strict: bool, log: bool) {
+    let base = cwd();
+    let arch_path = resolve_path(&base, &architecture);
+    let current_path = resolve_path(&base, &current);
+
+    let architecture = load_ir(&arch_path);
+    let current = load_ir(&current_path);
+
+    let report = archidoc_engine::design_validate::validate(&architecture, &current);
+
+    print!("{}", report.format());
+
+    if log && !report.is_clean() {
+        print_git_context(&current_path);
+    }
+
+    if report.should_fail(strict) {
+        std::process::exit(1);
+    }
+}
+
+fn print_git_context(actual_path: &Path) {
+    use std::process::Command;
+
+    let output = Command::new("git")
+        .args(["log", "--oneline", "-10", "--"])
+        .arg(actual_path)
+        .output();
+
+    match output {
+        Ok(out) if out.status.success() => {
+            let log = String::from_utf8_lossy(&out.stdout);
+            if !log.trim().is_empty() {
+                println!("Recent changes to {}:", actual_path.display());
+                println!("{}", log);
+            }
+        }
+        _ => {}
+    }
+}
+
+// ===========================================================================
+// Scaffold command
+// ===========================================================================
+
+fn run_scaffold(args: ScaffoldArgs) {
+    match args.command {
+        ScaffoldCommand::Compile { path, output_dir } => {
+            run_scaffold_compile(path, output_dir);
+        }
+        ScaffoldCommand::Create { name, target, vars, dry_run, force } => {
+            run_scaffold_create(&name, target, &vars, dry_run, force);
+        }
+        ScaffoldCommand::List => {
+            run_scaffold_list();
+        }
+        ScaffoldCommand::Inspect { name } => {
+            run_scaffold_inspect(&name);
+        }
+    }
+}
+
+fn run_scaffold_compile(path: PathBuf, output_dir: PathBuf) {
+    let base = cwd();
+    let source_dir = resolve_path(&base, &path);
+
+    if !source_dir.is_dir() {
+        eprintln!("error: not a directory: {}", source_dir.display());
+        std::process::exit(1);
+    }
+
+    let ir = match archidoc_engine::scaffold_ir::compile::compile(&source_dir) {
+        Ok(ir) => ir,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            std::process::exit(1);
+        }
     };
 
-    // Check if it's a built-in template
-    if folder_scaffold::is_builtin(name) {
-        let manifest = folder_scaffold::builtin_manifest(name).unwrap();
+    let name = ir
+        .template
+        .as_ref()
+        .map(|t| t.name.clone())
+        .unwrap_or_else(|| {
+            source_dir
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("template")
+                .to_string()
+        });
 
-        if args.inspect {
-            println!("template: {} (built-in)", manifest.template.name);
-            println!("description: {}", manifest.template.description);
-            println!();
-            println!("no variables required.");
-            return;
+    let output_dir = resolve_path(&base, &output_dir);
+    let scaffolds_dir = output_dir.join("scaffolds");
+    fs::create_dir_all(&scaffolds_dir).unwrap_or_else(|e| {
+        eprintln!("error: failed to create output directory: {}", e);
+        std::process::exit(1);
+    });
+
+    let out_path = scaffolds_dir.join(format!("{}.json", name));
+    let json = serde_json::to_string_pretty(&ir).unwrap_or_else(|e| {
+        eprintln!("error: failed to serialize: {}", e);
+        std::process::exit(1);
+    });
+
+    fs::write(&out_path, &json).unwrap_or_else(|e| {
+        eprintln!("error: failed to write {}: {}", out_path.display(), e);
+        std::process::exit(1);
+    });
+
+    let node_count = ir.nodes.len();
+    let var_count = ir.template.as_ref().map(|t| t.variables.len()).unwrap_or(0);
+    println!(
+        "{} nodes, {} variables → {}",
+        node_count,
+        var_count,
+        out_path.display()
+    );
+}
+
+fn run_scaffold_list() {
+    use archidoc_engine::scaffold_ir;
+
+    let base = cwd();
+    let disk = scaffold_ir::list(&base);
+    let disk_names: Vec<&str> = disk.iter().map(|(n, _, _)| n.as_str()).collect();
+
+    let has_any = !disk.is_empty() || !scaffold_ir::BUILTIN_NAMES.is_empty();
+    if !has_any {
+        println!("no scaffold templates found.");
+        return;
+    }
+
+    println!("available scaffold templates:");
+    println!();
+
+    for &bname in scaffold_ir::BUILTIN_NAMES {
+        if disk_names.contains(&bname) {
+            continue;
         }
+        if let Some(ir) = scaffold_ir::load_builtin(bname) {
+            let desc = ir
+                .template
+                .as_ref()
+                .map(|t| t.description.as_str())
+                .unwrap_or("");
+            println!("  {}  (built-in)", bname);
+            println!("    {}", desc);
+            println!();
+        }
+    }
 
-        let target = args.target.unwrap_or_else(|| cwd.clone());
-        let target = if target.is_absolute() { target } else { cwd.join(target) };
+    for (name, path, ir) in &disk {
+        let rel = path.strip_prefix(&base).unwrap_or(path);
+        let desc = ir
+            .template
+            .as_ref()
+            .map(|t| t.description.as_str())
+            .unwrap_or("");
+        let vars = ir
+            .template
+            .as_ref()
+            .map(|t| t.variables.as_slice())
+            .unwrap_or(&[]);
+        println!("  {}  (from {})", name, rel.display());
+        println!("    {}", desc);
+        if !vars.is_empty() {
+            let var_names: Vec<&str> = vars.iter().map(|v| v.name.as_str()).collect();
+            println!("    vars: {}", var_names.join(", "));
+        }
+        println!();
+    }
+}
 
-        let plan = match folder_scaffold::builtin_plan(name, &target, args.force) {
-            Ok(p) => p,
-            Err(folder_scaffold::ScaffoldError::WouldOverwrite(path)) => {
-                eprintln!("error: would overwrite existing file: {}", path.display());
-                eprintln!("use --force to overwrite.");
+fn run_scaffold_inspect(name: &str) {
+    use archidoc_engine::scaffold_ir;
+
+    let base = cwd();
+
+    let (ir, _template_dir) = resolve_scaffold_template(name, &base);
+
+    let ir = match scaffold_ir::resolve(ir, &base) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let tmpl = ir.template.as_ref();
+    let tname = tmpl.map(|t| t.name.as_str()).unwrap_or(name);
+    let desc = tmpl.map(|t| t.description.as_str()).unwrap_or("");
+    println!("template: {}", tname);
+    println!("description: {}", desc);
+    println!();
+    let vars = tmpl.map(|t| t.variables.as_slice()).unwrap_or(&[]);
+    if vars.is_empty() {
+        println!("no variables required.");
+    } else {
+        println!("variables:");
+        for var in vars {
+            let req = if var.required { "required" } else { "optional" };
+            let def = var
+                .default
+                .as_deref()
+                .map(|d| format!(" (default: {})", d))
+                .unwrap_or_default();
+            println!("  --var {}=<value>  [{}{}]", var.name, req, def);
+            println!("    {}", var.description);
+        }
+    }
+    let hooks = tmpl.map(|t| t.post_hooks.as_slice()).unwrap_or(&[]);
+    if !hooks.is_empty() {
+        println!();
+        println!("post-hooks:");
+        for hook in hooks {
+            println!("  {} — {}", hook.command, hook.description);
+        }
+    }
+}
+
+fn run_scaffold_create(
+    name: &str,
+    target: Option<PathBuf>,
+    vars: &[(String, String)],
+    dry_run: bool,
+    force: bool,
+) {
+    use archidoc_engine::scaffold_ir;
+    use archidoc_engine::scaffold_ir::{ActionOutcome, ExecuteError};
+
+    let base = cwd();
+
+    let (ir, template_dir) = resolve_scaffold_template(name, &base);
+
+    let ir = match scaffold_ir::resolve(ir, &template_dir) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let tmpl = ir.template.as_ref();
+
+    let empty_tmpl;
+    let tmpl_for_collect = match tmpl {
+        Some(t) => t,
+        None => {
+            empty_tmpl = archidoc_types::scaffold_ir::ScaffoldTemplate {
+                name: name.to_string(),
+                description: String::new(),
+                variables: vec![],
+                post_hooks: vec![],
+            };
+            &empty_tmpl
+        }
+    };
+
+    let variables = match scaffold_ir::collect(tmpl_for_collect, vars) {
+        Ok(v) => v,
+        Err(archidoc_engine::scaffold_ir::VariableError::Missing(missing)) => {
+            eprintln!(
+                "error: missing required variable(s): {}",
+                missing.join(", ")
+            );
+            eprintln!();
+            eprintln!("provide them with --var flags:");
+            for vname in &missing {
+                let desc = tmpl_for_collect
+                    .variables
+                    .iter()
+                    .find(|v| &v.name == vname)
+                    .map(|v| v.description.as_str())
+                    .unwrap_or("");
+                eprintln!("  --var {}=<value>    {}", vname, desc);
+            }
+            std::process::exit(1);
+        }
+    };
+
+    let target = target.unwrap_or_else(|| base.clone());
+    let target = resolve_path(&base, &target);
+
+    if dry_run {
+        let actions = match scaffold_ir::dry_run(&ir, &target, &variables) {
+            Ok(a) => a,
+            Err(ExecuteError::InvalidNode { detail }) => {
+                eprintln!("error: {}", detail);
                 std::process::exit(1);
             }
-            Err(e) => {
+            Err(ExecuteError::Io(e)) => {
                 eprintln!("error: {}", e);
                 std::process::exit(1);
             }
         };
 
-        if args.dry_run {
-            println!("dry run — would create:");
-            println!();
-            for action in &plan.actions {
-                match action {
-                    folder_scaffold::ScaffoldAction::CreateDir { path } => {
-                        let rel = path.strip_prefix(&target).unwrap_or(path);
-                        println!("  dir   {}/", rel.display());
-                    }
-                    folder_scaffold::ScaffoldAction::CreateFile { path, .. } => {
-                        let rel = path.strip_prefix(&target).unwrap_or(path);
-                        println!("  file  {}", rel.display());
-                    }
-                }
-            }
-            return;
-        }
-
-        match folder_scaffold::execute_plan(&plan) {
-            Ok(result) => {
-                let mut created = 0;
-                let mut skipped = 0;
-                for outcome in &result.outcomes {
-                    match outcome {
-                        folder_scaffold::ActionOutcome::Created(path) => {
-                            let rel = path.strip_prefix(&target).unwrap_or(path);
-                            println!("created  {}", rel.display());
-                            created += 1;
-                        }
-                        folder_scaffold::ActionOutcome::Skipped { path, .. } => {
-                            let rel = path.strip_prefix(&target).unwrap_or(path);
-                            println!("skipped  {}", rel.display());
-                            skipped += 1;
-                        }
-                        folder_scaffold::ActionOutcome::Failed { path, error } => {
-                            let rel = path.strip_prefix(&target).unwrap_or(path);
-                            eprintln!("failed   {}  ({})", rel.display(), error);
-                        }
-                    }
-                }
-                println!();
-                println!("created: {}  skipped: {}", created, skipped);
-            }
-            Err(e) => {
-                eprintln!("error: {}", e);
-                std::process::exit(1);
-            }
-        }
-        return;
-    }
-
-    // Disk template discovery
-    let template_dir = match folder_scaffold::discover_template(name, &cwd) {
-        Ok(dir) => dir,
-        Err(e) => {
-            eprintln!("error: {}", e);
-            eprintln!();
-            eprintln!("run `archidoc scaffold --list` to see available templates.");
-            std::process::exit(1);
-        }
-    };
-
-    let manifest = match folder_scaffold::load_manifest(&template_dir) {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("error: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    if args.inspect {
-        println!("template: {}", manifest.template.name);
-        println!("version:  {}", manifest.template.version);
-        println!("description: {}", manifest.template.description);
-        println!();
-        if manifest.variables.is_empty() {
-            println!("no variables required.");
-        } else {
-            println!("variables:");
-            for var in &manifest.variables {
-                let required = if var.required { "required" } else { "optional" };
-                let default = var
-                    .default
-                    .as_deref()
-                    .map(|d| format!(" (default: {})", d))
-                    .unwrap_or_default();
-                println!("  --var {}=<value>  [{}{}]", var.name, required, default);
-                println!("    {}", var.description);
-            }
-        }
-        if !manifest.post_hooks.is_empty() {
-            println!();
-            println!("post-hooks:");
-            for hook in &manifest.post_hooks {
-                println!("  {} — {}", hook.command, hook.description);
-            }
-        }
-        return;
-    }
-
-    let variables = match folder_scaffold::collect_variables(&manifest, &args.vars) {
-        Ok(v) => v,
-        Err(folder_scaffold::ScaffoldError::MissingVariables(missing)) => {
-            eprintln!("error: missing required variable(s): {}", missing.join(", "));
-            eprintln!();
-            eprintln!("provide them with --var flags:");
-            for name in &missing {
-                let desc = manifest
-                    .variables
-                    .iter()
-                    .find(|v| &v.name == name)
-                    .map(|v| v.description.as_str())
-                    .unwrap_or("");
-                eprintln!("  --var {}=<value>    {}", name, desc);
-            }
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("error: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    let target = args.target.unwrap_or_else(|| cwd.clone());
-    let target = if target.is_absolute() {
-        target
-    } else {
-        cwd.join(target)
-    };
-
-    // Build plan
-    let plan = match archidoc_engine::folder_scaffold::build_plan(
-        name,
-        &template_dir,
-        &target,
-        &variables,
-        manifest.post_hooks.clone(),
-        args.force,
-    ) {
-        Ok(p) => p,
-        Err(archidoc_engine::folder_scaffold::ScaffoldError::WouldOverwrite(path)) => {
-            eprintln!(
-                "error: would overwrite existing file: {}",
-                path.display()
-            );
-            eprintln!("use --force to overwrite.");
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("error: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    // Dry run
-    if args.dry_run {
         println!("dry run — would create:");
         println!();
-        for action in &plan.actions {
-            match action {
-                archidoc_engine::folder_scaffold::ScaffoldAction::CreateDir { path } => {
-                    let rel = path.strip_prefix(&target).unwrap_or(path);
-                    println!("  dir   {}/", rel.display());
-                }
-                archidoc_engine::folder_scaffold::ScaffoldAction::CreateFile { path, .. } => {
-                    let rel = path.strip_prefix(&target).unwrap_or(path);
-                    println!("  file  {}", rel.display());
-                }
+        for action in &actions {
+            let rel = action.path.strip_prefix(&target).unwrap_or(&action.path);
+            if action.kind == "dir" {
+                println!("  dir   {}/", rel.display());
+            } else {
+                println!("  file  {}", rel.display());
             }
         }
-        if !plan.post_hooks.is_empty() {
+
+        let hooks = tmpl.map(|t| t.post_hooks.as_slice()).unwrap_or(&[]);
+        if !hooks.is_empty() {
             println!();
             println!("post-hooks:");
-            for hook in &plan.post_hooks {
+            for hook in hooks {
                 println!("  {}", hook.command);
             }
         }
         return;
     }
 
-    // Execute
-    match archidoc_engine::folder_scaffold::execute_plan(&plan) {
-        Ok(result) => {
-            let mut created = 0;
-            let mut skipped = 0;
-            for outcome in &result.outcomes {
-                match outcome {
-                    archidoc_engine::folder_scaffold::ActionOutcome::Created(path) => {
-                        let rel = path.strip_prefix(&target).unwrap_or(path);
-                        println!("created  {}", rel.display());
-                        created += 1;
-                    }
-                    archidoc_engine::folder_scaffold::ActionOutcome::Skipped { path, .. } => {
-                        skipped += 1;
-                        let rel = path.strip_prefix(&target).unwrap_or(path);
-                        println!("skipped  {}", rel.display());
-                    }
-                    archidoc_engine::folder_scaffold::ActionOutcome::Failed { path, error } => {
-                        let rel = path.strip_prefix(&target).unwrap_or(path);
-                        eprintln!("failed   {}  ({})", rel.display(), error);
-                    }
-                }
-            }
-            println!();
-            println!("created: {}  skipped: {}", created, skipped);
-
-            // Report hook results
-            for hr in &result.hook_results {
-                if hr.success {
-                    println!("hook ok: {}", hr.command);
-                } else {
-                    eprintln!("hook failed: {} — {}", hr.command, hr.output.trim());
-                }
-            }
+    let result = match scaffold_ir::execute(&ir, &target, &variables, force) {
+        Ok(r) => r,
+        Err(ExecuteError::InvalidNode { detail }) => {
+            eprintln!("error: {}", detail);
+            std::process::exit(1);
         }
-        Err(e) => {
+        Err(ExecuteError::Io(e)) => {
             eprintln!("error: {}", e);
             std::process::exit(1);
         }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Polyglot adapter detection — auto-detect and merge language adapters
-// ---------------------------------------------------------------------------
-
-/// Collect ModuleDoc from all detected language adapters.
-///
-/// 1. Always runs the built-in Rust adapter
-/// 2. Auto-detects TypeScript (package.json + archidoc-ts available) and shells out
-/// 3. Merges results if both produce output
-fn collect_all_docs(root: &std::path::Path, verbosity: Verbosity) -> Vec<archidoc_types::ModuleDoc> {
-    let rust_docs = archidoc_rust::walker::extract_all_docs(root);
-    let ts_docs = detect_and_run_ts_adapter(root, verbosity);
-
-    if !rust_docs.is_empty() && !ts_docs.is_empty() {
-        match archidoc_engine::merge::merge_ir(vec![rust_docs, ts_docs]) {
-            Ok(merged) => merged,
-            Err(e) => {
-                eprintln!("warning: IR merge failed ({}), using Rust-only docs", e);
-                archidoc_rust::walker::extract_all_docs(root)
-            }
-        }
-    } else if !ts_docs.is_empty() {
-        ts_docs
-    } else {
-        rust_docs
-    }
-}
-
-/// Detect and run the archidoc-ts adapter if the project has TypeScript sources.
-///
-/// Returns an empty Vec if:
-/// - No package.json in root
-/// - archidoc-ts is not installed (npx would fail)
-/// - The subprocess fails or returns invalid JSON
-fn detect_and_run_ts_adapter(root: &std::path::Path, verbosity: Verbosity) -> Vec<archidoc_types::ModuleDoc> {
-    if !root.join("package.json").exists() {
-        return vec![];
-    }
-
-    // On Windows, .cmd/.bat scripts aren't directly executable by Command::new.
-    // Use cmd /c to resolve npx.cmd from PATH.
-    let output = if cfg!(windows) {
-        std::process::Command::new("cmd")
-            .args(["/c", "npx", "archidoc-ts", &root.to_string_lossy()])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .output()
-    } else {
-        std::process::Command::new("npx")
-            .args(["archidoc-ts", &root.to_string_lossy()])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .output()
     };
 
-    match output {
-        Ok(result) if result.status.success() => {
-            let json = String::from_utf8_lossy(&result.stdout);
-            match archidoc_engine::ir::deserialize(&json) {
-                Ok(docs) if !docs.is_empty() => {
-                    if verbosity == Verbosity::Verbose {
-                        eprintln!("  typescript adapter: {} modules", docs.len());
-                    }
-                    docs
-                }
-                Ok(_) => vec![],
-                Err(e) => {
-                    eprintln!("warning: archidoc-ts output could not be parsed: {}", e);
-                    vec![]
-                }
+    let mut created = 0usize;
+    let mut skipped = 0usize;
+    for outcome in &result.outcomes {
+        match outcome {
+            ActionOutcome::Created(path) => {
+                let rel = path.strip_prefix(&target).unwrap_or(path);
+                println!("created  {}", rel.display());
+                created += 1;
+            }
+            ActionOutcome::Skipped { path, .. } => {
+                let rel = path.strip_prefix(&target).unwrap_or(path);
+                println!("skipped  {}", rel.display());
+                skipped += 1;
             }
         }
-        Ok(result) => {
-            if verbosity == Verbosity::Verbose {
-                let stderr = String::from_utf8_lossy(&result.stderr);
-                eprintln!("  typescript adapter not available: {}", stderr.trim());
-            }
-            vec![]
-        }
-        Err(_) => {
-            if verbosity == Verbosity::Verbose {
-                eprintln!("  typescript adapter skipped (npx not found)");
-            }
-            vec![]
+    }
+    println!();
+    println!("created: {}  skipped: {}", created, skipped);
+
+    for hr in &result.hook_results {
+        if hr.success {
+            println!("hook ok: {}", hr.command);
+        } else {
+            eprintln!("hook failed: {} — {}", hr.command, hr.output.trim());
         }
     }
 }
 
+/// Resolve a scaffold template by name — shared by `create` and `inspect`.
+fn resolve_scaffold_template(
+    name: &str,
+    base: &Path,
+) -> (archidoc_types::scaffold_ir::ScaffoldIR, PathBuf) {
+    use archidoc_engine::scaffold_ir;
+
+    if name.ends_with(".json") || name.contains('/') || name.contains('\\') {
+        let path = resolve_path(base, Path::new(name));
+        let dir = path.parent().unwrap_or(base).to_path_buf();
+        let ir = archidoc_types::scaffold_ir::ScaffoldIR::load(&path).unwrap_or_else(|e| {
+            eprintln!("error: {}", e);
+            std::process::exit(1);
+        });
+        (ir, dir)
+    } else if scaffold_ir::is_builtin(name) {
+        let ir = scaffold_ir::load_builtin(name).unwrap();
+        (ir, base.to_path_buf())
+    } else {
+        match scaffold_ir::find(name, base) {
+            Some(path) => {
+                let dir = path.parent().unwrap_or(base).to_path_buf();
+                let ir =
+                    archidoc_types::scaffold_ir::ScaffoldIR::load(&path).unwrap_or_else(|e| {
+                        eprintln!("error: {}", e);
+                        std::process::exit(1);
+                    });
+                (ir, dir)
+            }
+            None => {
+                eprintln!("error: template '{}' not found", name);
+                eprintln!();
+                eprintln!("run `archidoc scaffold list` to see available templates.");
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+// ===========================================================================
+// Annotate
+// ===========================================================================
+
+fn run_annotate(args: AnnotateArgs) {
+    if args.coverage {
+        run_annotate_coverage(&args);
+        return;
+    }
+
+    use archidoc_engine::annotate::{self, Lang, Outcome, SkipReason};
+
+    let lang_str = match &args.lang {
+        Some(l) => l.clone(),
+        None => {
+            eprintln!("error: <lang> is required (rs, ts, js, md). Use --coverage for reports.");
+            std::process::exit(1);
+        }
+    };
+
+    let lang = match Lang::from_str(&lang_str) {
+        Some(l) => l,
+        None => {
+            eprintln!(
+                "error: unknown language '{}' (supported: rs, ts, js, md)",
+                lang_str
+            );
+            std::process::exit(1);
+        }
+    };
+
+    let base = cwd();
+    let target = args.path.unwrap_or_else(|| base.clone());
+    let target = resolve_path(&base, &target);
+
+    if args.dry_run {
+        let items = annotate::dry_run(&target, lang, args.recursive, args.depth);
+        if items.is_empty() {
+            println!("nothing to annotate.");
+            return;
+        }
+        println!(
+            "dry run ({} director{}):",
+            items.len(),
+            if items.len() == 1 { "y" } else { "ies" }
+        );
+        println!();
+        for item in &items {
+            let rel = item.path.strip_prefix(&target).unwrap_or(&item.path);
+            println!("  {:30}  {}", rel.display(), item.action);
+        }
+        return;
+    }
+
+    let outcomes = if args.recursive {
+        annotate::annotate_recursive(&target, lang, args.force, args.depth)
+    } else {
+        vec![annotate::annotate_dir(&target, lang, args.force)]
+    };
+
+    let mut created = 0usize;
+    let mut prepended = 0usize;
+    let mut skipped = 0usize;
+    let mut errors = 0usize;
+
+    for outcome in &outcomes {
+        match outcome {
+            Outcome::Created(path) => {
+                let rel = path.strip_prefix(&target).unwrap_or(path);
+                println!("created   {}", rel.display());
+                created += 1;
+            }
+            Outcome::Prepended(path) => {
+                let rel = path.strip_prefix(&target).unwrap_or(path);
+                println!("prepended {}", rel.display());
+                prepended += 1;
+            }
+            Outcome::Skipped { path, reason } => {
+                let rel = path.strip_prefix(&target).unwrap_or(path);
+                match reason {
+                    SkipReason::AlreadyAnnotated => {
+                        println!("skipped   {}  (already annotated)", rel.display());
+                    }
+                    SkipReason::FileExistsNoForce => {
+                        println!(
+                            "skipped   {}  (file exists — use --force to prepend)",
+                            rel.display()
+                        );
+                    }
+                }
+                skipped += 1;
+            }
+            Outcome::Error { path, error } => {
+                let rel = path.strip_prefix(&target).unwrap_or(path);
+                eprintln!("error     {}  ({})", rel.display(), error);
+                errors += 1;
+            }
+        }
+    }
+
+    println!();
+    println!(
+        "created: {}  prepended: {}  skipped: {}  errors: {}",
+        created, prepended, skipped, errors
+    );
+
+    if errors > 0 {
+        std::process::exit(1);
+    }
+}
+
+fn run_annotate_coverage(args: &AnnotateArgs) {
+    let base = cwd();
+    let source = args.path.clone().unwrap_or_else(|| base.clone());
+    let source = resolve_path(&base, &source);
+    let ir = resolve_source(&source);
+    let report = archidoc_engine::coverage::compute_coverage(&ir, args.depth);
+    print!("{}", archidoc_engine::coverage::format_coverage_report(&report));
+}
+
+// ===========================================================================
+// Helpers
+// ===========================================================================
+
+fn cwd() -> PathBuf {
+    std::env::current_dir().expect("failed to get current directory")
+}
+
+fn resolve_path(base: &Path, p: &Path) -> PathBuf {
+    if p.is_absolute() { p.to_path_buf() } else { base.join(p) }
+}
+
+fn load_ir(path: &Path) -> archidoc_types::ir::ArchitectureIR {
+    archidoc_types::ir::ArchitectureIR::load(path).unwrap_or_else(|e| {
+        eprintln!("error: {}", e);
+        std::process::exit(1);
+    })
+}
+
+/// Load IR from --ir-path or default _context/current.json.
+fn load_ir_default(ir_path: Option<PathBuf>) -> archidoc_types::ir::ArchitectureIR {
+    let base = cwd();
+    let ir_path = ir_path.unwrap_or_else(|| base.join("_context/current.json"));
+    let ir_path = resolve_path(&base, &ir_path);
+
+    if !ir_path.exists() {
+        eprintln!(
+            "error: IR file not found: {}\nRun `archidoc ir compile .` first.",
+            ir_path.display()
+        );
+        std::process::exit(1);
+    }
+
+    load_ir(&ir_path)
+}
+
+fn stamp_design(mut ir: archidoc_types::ir::ArchitectureIR) -> archidoc_types::ir::ArchitectureIR {
+    stamp_dir_planned(&mut ir.root);
+    ir
+}
+
+fn stamp_dir_planned(node: &mut archidoc_types::ir::DirNode) {
+    for file in &mut node.files {
+        if file.health.is_some() {
+            file.health = Some(archidoc_types::annotation::HealthStatus::Planned);
+        }
+    }
+    for child in &mut node.dirs {
+        stamp_dir_planned(child);
+    }
+}
+
+fn write_file(path: &Path, content: &str) {
+    fs::write(path, content).unwrap_or_else(|e| {
+        eprintln!("error: failed to write {}: {}", path.display(), e);
+        std::process::exit(1);
+    });
+    println!("wrote {}", path.display());
+}

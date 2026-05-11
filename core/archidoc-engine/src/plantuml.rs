@@ -2,32 +2,37 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use archidoc_types::{C4Level, ModuleDoc};
+use archidoc_types::ir::{ArchitectureIR, DirNode};
+use archidoc_types::C4Level;
 
-/// Generate PlantUML C4 container diagram from `@c4 container` modules.
-pub fn generate_container(output_dir: &Path, docs: &[ModuleDoc]) {
+/// Generate PlantUML C4 container diagram.
+pub fn generate_container(output_dir: &Path, ir: &ArchitectureIR) {
     let filepath = output_dir.join("c4-container.puml");
 
-    let containers: Vec<&ModuleDoc> = docs
+    let all_annotated = ir.annotated_dirs();
+    let containers: Vec<&DirNode> = all_annotated
         .iter()
-        .filter(|d| d.c4_level == C4Level::Container)
+        .copied()
+        .filter(|d| d.c4_level == Some(C4Level::Container))
         .collect();
 
     let mut container_defs = String::new();
-    for doc in &containers {
-        let id = doc.module_path.replace('.', "_");
-        let name = to_title_case(&doc.module_path);
+    for dir in &containers {
+        let id = to_puml_id(&dir.path);
+        let name = to_title_case(&dir.name);
+        let pattern = dir.pattern.as_deref().unwrap_or("--");
+        let desc = dir.description.as_deref().unwrap_or("");
         container_defs.push_str(&format!(
             "    Container({}, \"{}\", \"{}\", \"{}\")\n",
-            id, name, doc.pattern, doc.description
+            id, name, pattern, desc
         ));
     }
 
     let mut rel_defs = String::new();
-    for doc in &containers {
-        let from_id = doc.module_path.replace('.', "_");
-        for rel in &doc.relationships {
-            let to_id = rel.target.replace('.', "_");
+    for dir in &containers {
+        let from_id = to_puml_id(&dir.path);
+        for rel in &dir.relationships {
+            let to_id = to_puml_id(&rel.target);
             rel_defs.push_str(&format!(
                 "Rel({}, {}, \"{}\", \"{}\")\n",
                 from_id, to_id, rel.label, rel.protocol
@@ -53,52 +58,52 @@ System_Boundary(sys, "System") {{
     fs::write(&filepath, content).expect("Failed to write c4-container.puml");
 }
 
-/// Generate PlantUML C4 component diagram from `@c4 component` modules.
-pub fn generate_component(output_dir: &Path, docs: &[ModuleDoc]) {
+/// Generate PlantUML C4 component diagram.
+pub fn generate_component(output_dir: &Path, ir: &ArchitectureIR) {
     let filepath = output_dir.join("c4-component.puml");
 
-    let components: Vec<&ModuleDoc> = docs
+    let all_annotated = ir.annotated_dirs();
+    let components: Vec<&DirNode> = all_annotated
         .iter()
-        .filter(|d| d.c4_level == C4Level::Component)
+        .copied()
+        .filter(|d| d.c4_level == Some(C4Level::Component))
         .collect();
 
-    let mut grouped: BTreeMap<String, Vec<&ModuleDoc>> = BTreeMap::new();
-    for doc in &components {
-        let parent = doc
-            .parent_container
+    let mut grouped: BTreeMap<String, Vec<&DirNode>> = BTreeMap::new();
+    for dir in &components {
+        let parent = dir
+            .parent
             .clone()
             .unwrap_or_else(|| "other".to_string());
-        grouped.entry(parent).or_default().push(doc);
+        grouped.entry(parent).or_default().push(dir);
     }
 
     let mut boundary_defs = String::new();
-    for (parent, component_docs) in &grouped {
-        let parent_id = parent.replace('.', "_");
-        let parent_name = to_title_case(parent);
+    for (parent, component_dirs) in &grouped {
+        let parent_id = to_puml_id(parent);
+        let parent_name = to_title_case(parent.split('/').last().unwrap_or(parent));
         boundary_defs.push_str(&format!(
             "Container_Boundary({}_boundary, \"{}\") {{\n",
             parent_id, parent_name
         ));
-        for doc in component_docs {
-            let id = doc.module_path.replace('.', "_");
-            let name = doc
-                .module_path
-                .split('.')
-                .last()
-                .unwrap_or(&doc.module_path);
+        for dir in component_dirs {
+            let id = to_puml_id(&dir.path);
+            let name = &dir.name;
+            let pattern = dir.pattern.as_deref().unwrap_or("--");
+            let desc = dir.description.as_deref().unwrap_or("");
             boundary_defs.push_str(&format!(
                 "    Component({}, \"{}\", \"{}\", \"{}\")\n",
-                id, name, doc.pattern, doc.description
+                id, name, pattern, desc
             ));
         }
         boundary_defs.push_str("}\n\n");
     }
 
     let mut rel_defs = String::new();
-    for doc in &components {
-        let from_id = doc.module_path.replace('.', "_");
-        for rel in &doc.relationships {
-            let to_id = rel.target.replace('.', "_");
+    for dir in &components {
+        let from_id = to_puml_id(&dir.path);
+        for rel in &dir.relationships {
+            let to_id = to_puml_id(&rel.target);
             rel_defs.push_str(&format!(
                 "Rel({}, {}, \"{}\", \"{}\")\n",
                 from_id, to_id, rel.label, rel.protocol
@@ -121,11 +126,12 @@ title Component Diagram (GoF Patterns)
     fs::write(&filepath, content).expect("Failed to write c4-component.puml");
 }
 
+fn to_puml_id(s: &str) -> String {
+    s.replace('.', "_").replace('/', "_").replace('-', "_")
+}
+
 fn to_title_case(s: &str) -> String {
-    s.split('.')
-        .last()
-        .unwrap_or(s)
-        .split('_')
+    s.split('_')
         .map(|word| {
             let mut chars = word.chars();
             match chars.next() {

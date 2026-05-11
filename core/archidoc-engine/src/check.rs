@@ -1,14 +1,15 @@
 use std::fs;
 use std::path::Path;
 
-use archidoc_types::{DriftReport, DriftedFile, ModuleDoc};
+use archidoc_types::ir::ArchitectureIR;
+use archidoc_types::{DriftReport, DriftedFile};
 
 /// Check for documentation drift against a single ARCHITECTURE.md file.
 ///
 /// Generates the expected content in memory and compares it to the
 /// existing file on disk. Returns a report of differences.
-pub fn check_drift(docs: &[ModuleDoc], architecture_file: &Path, root: &Path) -> DriftReport {
-    let expected = crate::architecture::generate(docs, root, &[]);
+pub fn check_drift(ir: &ArchitectureIR, architecture_file: &Path, _root: &Path) -> DriftReport {
+    let expected = crate::architecture::generate(ir, &[]);
 
     let mut report = DriftReport::default();
 

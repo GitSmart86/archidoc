@@ -1,32 +1,43 @@
+use archidoc_types::ir::ArchitectureIR;
 use archidoc_types::{
-    C4Level, ElementHealth, HealthReport, HealthStatus, ModuleDoc, PatternStatus,
+    C4Level, ElementHealth, HealthReport, HealthStatus, PatternStatus,
 };
 
 /// Aggregate health across all architectural elements.
 ///
 /// Counts files by maturity (planned/active/stable) and patterns by
 /// confidence (planned/verified), both project-wide and per-element.
-pub fn aggregate_health(docs: &[ModuleDoc]) -> HealthReport {
+pub fn aggregate_health(ir: &ArchitectureIR) -> HealthReport {
+    let annotated = ir.annotated_dirs();
     let mut report = HealthReport::default();
 
-    report.total_elements = docs.len();
-    report.container_count = docs.iter().filter(|d| d.c4_level == C4Level::Container).count();
-    report.component_count = docs.iter().filter(|d| d.c4_level == C4Level::Component).count();
+    report.total_elements = annotated.len();
+    report.container_count = annotated.iter().filter(|d| d.c4_level == Some(C4Level::Container)).count();
+    report.component_count = annotated.iter().filter(|d| d.c4_level == Some(C4Level::Component)).count();
 
-    for doc in docs {
+    for dir in &annotated {
+        let c4_level = dir.c4_level.unwrap_or(C4Level::Unknown);
+        let pattern = dir.pattern.as_deref().unwrap_or("--").to_string();
+        let pattern_status = dir.pattern_status.unwrap_or_default();
+
+        // Only count files that have health attributes (same as old ModuleDoc filtering)
+        let attributed_files: Vec<_> = dir.files.iter()
+            .filter(|f| f.health.is_some())
+            .collect();
+
         let mut elem = ElementHealth {
-            name: doc.module_path.clone(),
-            c4_level: doc.c4_level.to_string(),
-            file_count: doc.files.len(),
+            name: dir.path.clone(),
+            c4_level: c4_level.to_string(),
+            file_count: attributed_files.len(),
             files_planned: 0,
             files_active: 0,
             files_stable: 0,
-            pattern: doc.pattern.clone(),
-            pattern_confidence: doc.pattern_status.to_string(),
+            pattern: pattern.clone(),
+            pattern_confidence: pattern_status.to_string(),
         };
 
-        for file in &doc.files {
-            match file.health {
+        for file in &attributed_files {
+            match file.health.unwrap_or_default() {
                 HealthStatus::Planned => {
                     report.files_planned += 1;
                     elem.files_planned += 1;
@@ -42,11 +53,11 @@ pub fn aggregate_health(docs: &[ModuleDoc]) -> HealthReport {
             }
         }
 
-        report.total_files += doc.files.len();
+        report.total_files += attributed_files.len();
 
-        if doc.pattern != "--" && !doc.pattern.is_empty() {
+        if pattern != "--" && !pattern.is_empty() {
             report.patterns_total += 1;
-            match doc.pattern_status {
+            match pattern_status {
                 PatternStatus::Planned => report.patterns_planned += 1,
                 PatternStatus::Verified => report.patterns_verified += 1,
             }

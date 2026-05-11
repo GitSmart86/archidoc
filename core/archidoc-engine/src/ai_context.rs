@@ -1,28 +1,26 @@
-use std::collections::HashSet;
+use archidoc_types::ir::{ArchitectureIR, DirNode};
 
-use archidoc_types::ModuleDoc;
-
-/// Generate token-optimized AI context from module documentation.
+/// Generate token-optimized AI context from IR.
 ///
 /// Produces a compressed tree format: no Mermaid, no ASCII art, no tables.
 /// Each module appears exactly once. ~75% fewer tokens than ARCHITECTURE.md.
-pub fn generate(docs: &[ModuleDoc]) -> String {
+pub fn generate(ir: &ArchitectureIR) -> String {
     let mut out = String::new();
 
     out.push_str("# Architecture (AI Context)\n\n");
 
-    let narr = narrative(docs);
+    let narr = narrative(ir);
     if !narr.is_empty() {
         out.push_str(&narr);
         out.push('\n');
     }
 
-    let tree = module_tree(docs);
+    let tree = module_tree(ir);
     if !tree.is_empty() {
         out.push_str(&tree);
     }
 
-    let rels = relationships(docs);
+    let rels = relationships(ir);
     if !rels.is_empty() {
         out.push('\n');
         out.push_str(&rels);
@@ -31,18 +29,18 @@ pub fn generate(docs: &[ModuleDoc]) -> String {
     out
 }
 
-/// Extract prose from _lib content, skipping code blocks, tables, and markers.
-fn narrative(docs: &[ModuleDoc]) -> String {
-    let lib = match docs.iter().find(|d| d.module_path == "_lib") {
-        Some(doc) => doc,
-        None => return String::new(),
+/// Extract prose from root content, skipping code blocks, tables, and markers.
+fn narrative(ir: &ArchitectureIR) -> String {
+    let content = match &ir.root.content {
+        Some(c) if ir.root.is_annotated() => c,
+        _ => return String::new(),
     };
 
     let mut lines: Vec<&str> = Vec::new();
     let mut in_code_block = false;
     let mut in_table = false;
 
-    for line in lib.content.lines() {
+    for line in content.lines() {
         let t = line.trim();
 
         // Skip fenced code blocks entirely (ASCII art, Mermaid, examples)
@@ -106,87 +104,68 @@ fn narrative(docs: &[ModuleDoc]) -> String {
 }
 
 /// Build indented module tree with pattern and description.
-fn module_tree(docs: &[ModuleDoc]) -> String {
-    let mut modules: Vec<&ModuleDoc> = docs
-        .iter()
-        .filter(|d| d.module_path != "_lib")
-        .collect();
-    modules.sort_by(|a, b| a.module_path.cmp(&b.module_path));
-
-    if modules.is_empty() {
-        return String::new();
-    }
-
-    let prefix = common_prefix(&modules);
-
-    // Build set of short paths for depth computation
-    let short_paths: HashSet<String> = modules
-        .iter()
-        .map(|d| {
-            d.module_path
-                .strip_prefix(&prefix)
-                .unwrap_or(&d.module_path)
-                .to_string()
-        })
-        .collect();
-
+///
+/// Walks the IR tree recursively — the tree IS the nesting.
+/// No common_prefix logic needed.
+fn module_tree(ir: &ArchitectureIR) -> String {
     let mut out = String::new();
+    // Walk children of root (root itself is skipped, like _lib was)
+    for child in &ir.root.dirs {
+        emit_tree_node(child, 0, &mut out);
+    }
+    out
+}
 
-    for doc in &modules {
-        let short = doc
-            .module_path
-            .strip_prefix(&prefix)
-            .unwrap_or(&doc.module_path);
-        let name = short.rsplit('.').next().unwrap_or(short);
-
-        // Depth = number of ancestor paths that are also modules in our set
-        let parts: Vec<&str> = short.split('.').collect();
-        let mut depth = 0;
-        for i in 1..parts.len() {
-            if short_paths.contains(&parts[..i].join(".")) {
-                depth += 1;
-            }
-        }
+/// Recursively emit a DirNode into the tree output.
+fn emit_tree_node(dir: &DirNode, depth: usize, out: &mut String) {
+    if dir.is_annotated() {
         let indent = "  ".repeat(depth);
+        let name = &dir.name;
 
         out.push_str(&indent);
         out.push_str(name);
         out.push('/');
 
-        if doc.pattern != "--" {
+        let pattern = dir.pattern.as_deref().unwrap_or("--");
+        if pattern != "--" {
             out.push(' ');
-            out.push_str(&doc.pattern);
+            out.push_str(pattern);
         }
 
-        if !doc.description.is_empty() {
+        let desc = dir.description.as_deref().unwrap_or("");
+        if !desc.is_empty() {
             out.push_str(" — ");
-            out.push_str(&doc.description);
+            out.push_str(desc);
         }
 
         out.push('\n');
-    }
 
-    out
+        // Children of an annotated node are indented one deeper
+        for child in &dir.dirs {
+            emit_tree_node(child, depth + 1, out);
+        }
+    } else {
+        // Unannotated intermediate: pass through at same depth
+        for child in &dir.dirs {
+            emit_tree_node(child, depth, out);
+        }
+    }
 }
 
-/// Flat relationship list with short module names.
-fn relationships(docs: &[ModuleDoc]) -> String {
-    let modules: Vec<&ModuleDoc> = docs
+/// Flat relationship list.
+fn relationships(ir: &ArchitectureIR) -> String {
+    let annotated = ir.annotated_dirs();
+    let modules: Vec<&&DirNode> = annotated
         .iter()
-        .filter(|d| d.module_path != "_lib")
+        .filter(|d| d.path != ".")
         .collect();
-    let prefix = common_prefix(&modules);
 
     let rels: Vec<_> = modules
         .iter()
-        .flat_map(|doc| {
-            let prefix = &prefix;
-            doc.relationships.iter().map(move |r| {
-                let src = doc
-                    .module_path
-                    .strip_prefix(prefix)
-                    .unwrap_or(&doc.module_path);
-                let tgt = r.target.strip_prefix(prefix).unwrap_or(&r.target);
+        .flat_map(|dir| {
+            dir.relationships.iter().map(move |r| {
+                let src = &dir.path;
+                let tgt = &r.target;
                 (src.to_string(), tgt.to_string(), r.label.clone(), r.protocol.clone())
             })
         })
@@ -206,110 +185,62 @@ fn relationships(docs: &[ModuleDoc]) -> String {
     out
 }
 
-/// Find common dot-separated prefix across all module paths.
-fn common_prefix(modules: &[&ModuleDoc]) -> String {
-    if modules.len() < 2 {
-        return String::new();
-    }
-
-    let first: Vec<&str> = modules[0].module_path.split('.').collect();
-    let mut len = first.len();
-
-    for m in &modules[1..] {
-        let parts: Vec<&str> = m.module_path.split('.').collect();
-        let mut n = 0;
-        for (a, b) in first.iter().zip(parts.iter()) {
-            if a == b {
-                n += 1;
-            } else {
-                break;
-            }
-        }
-        len = len.min(n);
-    }
-
-    // Don't strip beyond the shortest module path — every module must keep at least one segment
-    let min_segments = modules
-        .iter()
-        .map(|m| m.module_path.matches('.').count() + 1)
-        .min()
-        .unwrap_or(1);
-    len = len.min(min_segments - 1);
-
-    if len == 0 {
-        return String::new();
-    }
-
-    format!("{}.", first[..len].join("."))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use archidoc_types::{C4Level, PatternStatus};
+    use archidoc_types::ir::{ArchitectureIR, DirNode, Relationship};
+    use archidoc_types::C4Level;
 
-    fn doc(path: &str, pattern: &str, desc: &str, level: C4Level) -> ModuleDoc {
-        ModuleDoc {
-            module_path: path.to_string(),
-            content: String::new(),
-            source_file: format!("src/{}/mod.rs", path.replace('.', "/")),
-            c4_level: level,
-            pattern: pattern.to_string(),
-            pattern_status: PatternStatus::Planned,
-            description: desc.to_string(),
-            parent_container: None,
-            relationships: vec![],
-            files: vec![],
+    fn make_ir_with_dirs(dirs: Vec<DirNode>, root_content: Option<String>) -> ArchitectureIR {
+        let mut root = DirNode::empty(".", ".");
+        if root_content.is_some() {
+            root.c4_level = Some(C4Level::Container);
+            root.content = root_content;
+        }
+        root.dirs = dirs;
+        ArchitectureIR {
+            version: "2.0".to_string(),
+            scan_root: String::new(),
+            root,
         }
     }
 
-    fn lib(content: &str) -> ModuleDoc {
-        ModuleDoc {
-            module_path: "_lib".to_string(),
-            content: content.to_string(),
-            source_file: "src/lib.rs".to_string(),
-            c4_level: C4Level::Container,
-            pattern: "--".to_string(),
-            pattern_status: PatternStatus::Planned,
-            description: String::new(),
-            parent_container: None,
-            relationships: vec![],
-            files: vec![],
-        }
+    fn make_annotated_dir(name: &str, path: &str, pattern: &str, desc: &str, level: C4Level) -> DirNode {
+        let mut dir = DirNode::empty(name, path);
+        dir.c4_level = Some(level);
+        dir.pattern = if pattern == "--" { None } else { Some(pattern.to_string()) };
+        dir.description = if desc.is_empty() { None } else { Some(desc.to_string()) };
+        dir.source_file = Some(format!("{}/mod.rs", path));
+        dir
     }
 
     #[test]
     fn empty_docs() {
-        let out = generate(&[]);
+        let ir = make_ir_with_dirs(vec![], None);
+        let out = generate(&ir);
         assert!(out.contains("# Architecture (AI Context)"));
     }
 
     #[test]
     fn single_module() {
-        let docs = vec![doc("api", "Facade", "REST gateway", C4Level::Container)];
-        let out = generate(&docs);
+        let ir = make_ir_with_dirs(
+            vec![make_annotated_dir("api", "api", "Facade", "REST gateway", C4Level::Container)],
+            None,
+        );
+        let out = generate(&ir);
         assert!(out.contains("api/ Facade — REST gateway"));
     }
 
     #[test]
-    fn strips_common_prefix() {
-        let docs = vec![
-            doc("a.b.foo", "Facade", "Foo", C4Level::Container),
-            doc("a.b.bar", "--", "Bar", C4Level::Container),
-        ];
-        let out = generate(&docs);
-        assert!(out.contains("bar/ — Bar"));
-        assert!(out.contains("foo/ Facade — Foo"));
-    }
-
-    #[test]
     fn nested_indentation() {
-        let docs = vec![
-            doc("a.b.bus", "Mediator", "Bus", C4Level::Container),
-            doc("a.b.bus.calc", "Strategy", "Calc", C4Level::Component),
-            doc("a.b.bus.calc.ind", "--", "Indicators", C4Level::Component),
-        ];
-        let out = generate(&docs);
+        let mut bus = make_annotated_dir("bus", "bus", "Mediator", "Bus", C4Level::Container);
+        let mut calc = make_annotated_dir("calc", "bus/calc", "Strategy", "Calc", C4Level::Component);
+        let ind = make_annotated_dir("ind", "bus/calc/ind", "--", "Indicators", C4Level::Component);
+        calc.dirs.push(ind);
+        bus.dirs.push(calc);
+
+        let ir = make_ir_with_dirs(vec![bus], None);
+        let out = generate(&ir);
         assert!(out.contains("bus/ Mediator — Bus\n"));
         assert!(out.contains("  calc/ Strategy — Calc\n"));
         assert!(out.contains("    ind/ — Indicators\n"));
@@ -317,10 +248,11 @@ mod tests {
 
     #[test]
     fn narrative_skips_code_blocks() {
-        let docs = vec![lib(
-            "# Title\n\nProse here.\n\n```text\n\u{250c}\u{2500}\u{2500}\u{2510}\n\u{2514}\u{2500}\u{2500}\u{2518}\n```\n\n## Flow\n\n1. Step one",
-        )];
-        let out = generate(&docs);
+        let ir = make_ir_with_dirs(
+            vec![],
+            Some("# Title\n\nProse here.\n\n```text\n\u{250c}\u{2500}\u{2500}\u{2510}\n\u{2514}\u{2500}\u{2500}\u{2518}\n```\n\n## Flow\n\n1. Step one".to_string()),
+        );
+        let out = generate(&ir);
         assert!(out.contains("# Title"));
         assert!(out.contains("Prose here."));
         assert!(out.contains("## Flow"));
@@ -331,10 +263,11 @@ mod tests {
 
     #[test]
     fn narrative_skips_markers_and_tables() {
-        let docs = vec![lib(
-            "@c4 container\n\n# Eng\n\nDesc.\n\n| File | Pattern |\n|------|---------|\n| `a` | Facade |\n\nGoF: Mediator",
-        )];
-        let out = generate(&docs);
+        let ir = make_ir_with_dirs(
+            vec![],
+            Some("@c4 container\n\n# Eng\n\nDesc.\n\n| File | Pattern |\n|------|---------|\n| `a` | Facade |\n\nGoF: Mediator".to_string()),
+        );
+        let out = generate(&ir);
         assert!(out.contains("# Eng"));
         assert!(out.contains("Desc."));
         assert!(!out.contains("@c4"));
@@ -344,25 +277,26 @@ mod tests {
 
     #[test]
     fn dash_dash_pattern_hidden() {
-        let docs = vec![doc("types", "--", "Core types", C4Level::Container)];
-        let out = generate(&docs);
+        let ir = make_ir_with_dirs(
+            vec![make_annotated_dir("types", "types", "--", "Core types", C4Level::Container)],
+            None,
+        );
+        let out = generate(&ir);
         assert!(out.contains("types/ — Core types"));
         assert!(!out.contains("--"));
     }
 
     #[test]
     fn c4_context_mermaid_stripped_from_ai() {
-        // Simulates the init template's C4 Context section — mermaid block should be
-        // stripped entirely, and the orphaned ## C4 Context header removed.
-        let docs = vec![lib(
-            "@c4 container\n\n# My App\n\nA cool app.\n\n## C4 Context\n\n```mermaid\nC4Context\n    Person(user, \"User\", \"Actor\")\n```\n\n## Data Flow\n\n1. A -> B -> C",
-        )];
-        let out = generate(&docs);
+        let ir = make_ir_with_dirs(
+            vec![],
+            Some("@c4 container\n\n# My App\n\nA cool app.\n\n## C4 Context\n\n```mermaid\nC4Context\n    Person(user, \"User\", \"Actor\")\n```\n\n## Data Flow\n\n1. A -> B -> C".to_string()),
+        );
+        let out = generate(&ir);
         assert!(out.contains("# My App"));
         assert!(out.contains("A cool app."));
         assert!(out.contains("## Data Flow"));
         assert!(out.contains("1. A -> B -> C"));
-        // C4 Context section should be gone
         assert!(!out.contains("C4 Context"));
         assert!(!out.contains("C4Context"));
         assert!(!out.contains("mermaid"));
@@ -370,14 +304,19 @@ mod tests {
 
     #[test]
     fn relationships_included() {
-        let mut api = doc("x.api", "Facade", "API", C4Level::Container);
-        api.relationships = vec![archidoc_types::Relationship {
-            target: "x.db".to_string(),
+        let mut api = make_annotated_dir("api", "x/api", "Facade", "API", C4Level::Container);
+        api.relationships = vec![Relationship {
+            target: "x/db".to_string(),
             label: "Persists".to_string(),
             protocol: "sqlx".to_string(),
         }];
-        let docs = vec![api, doc("x.db", "Repository", "DB", C4Level::Container)];
-        let out = generate(&docs);
-        assert!(out.contains("api -> db: \"Persists\" (sqlx)"));
+        // Wrap in parent dir "x"
+        let mut x = DirNode::empty("x", "x");
+        x.dirs.push(api);
+        x.dirs.push(make_annotated_dir("db", "x/db", "Repository", "DB", C4Level::Container));
+
+        let ir = make_ir_with_dirs(vec![x], None);
+        let out = generate(&ir);
+        assert!(out.contains("x/api -> x/db: \"Persists\" (sqlx)"));
     }
 }

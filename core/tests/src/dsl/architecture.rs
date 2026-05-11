@@ -448,31 +448,6 @@ impl ArchitectureDsl {
     }
 
     // =========================================================================
-    // Phase L — Annotation scaffolding
-    // =========================================================================
-
-    /// Generate an annotation template for an element's directory.
-    /// Format: "element: api"
-    pub fn suggest_for(&mut self, args: &[&str]) {
-        let params = Params::parse(args);
-        self.driver.suggest_for(&params.get("element"));
-    }
-
-    /// Assert the suggestion output infers the expected C4 level.
-    /// Format: "level: container"
-    pub fn assert_suggestion_level(&self, args: &[&str]) {
-        let params = Params::parse(args);
-        self.driver.confirm_suggestion_level(&params.get("level"));
-    }
-
-    /// Assert the suggestion output lists a source file.
-    /// Format: "file: routes.rs"
-    pub fn assert_suggestion_lists_file(&self, args: &[&str]) {
-        let params = Params::parse(args);
-        self.driver.confirm_suggestion_lists_file(&params.get("file"));
-    }
-
-    // =========================================================================
     // Phase L — IR merging
     // =========================================================================
 

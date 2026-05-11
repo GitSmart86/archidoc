@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-11
+
+### Added
+
+- **Noun-first CLI convention** — all commands now group under their noun: `ir`, `scaffold`, `annotate`. This is a **breaking change** from the verb-first convention in v0.4.0.
+- **`archidoc ir ls <path> [--depth N]`** — list directory children from compiled IR without re-scanning. Reads from `_context/current.json` by default.
+- **`archidoc ir describe <path>`** — full detail view for one directory node (C4 level, description, pattern, file counts by extension, subdirs, relationships, source file).
+- **`archidoc ir query [--empty] [--populated] [--scaffold] [--annotated]`** — filter all directories by state flags with AND logic. No flags = list all.
+- **`archidoc scaffold list`** — replaces `scaffold --list` flag.
+- **`archidoc scaffold inspect <name>`** — replaces `scaffold --inspect` flag.
+- **`archidoc scaffold create <name>`** — replaces bare `scaffold <name>`.
+- **`ir_query.rs` engine module** — `ls()`, `describe()`, `query()` functions with `QueryFilter` struct. 9 unit tests.
+- **`DirNode` helper methods** — `file_count()`, `total_file_count()`, `is_empty_leaf()`, `is_populated()`, `is_scaffold()`, `is_described()`, `extension_counts()`.
+- **`archidoc annotate --coverage`** — annotation coverage report derived from compiled IR. Shows populated/stub/unannotated counts with percentages and lists unannotated directories. Accepts a directory (auto-compiles) or an existing `.json` IR file.
+- **`--depth` flag on `annotate`** — limits recursive annotation and coverage reporting to N levels below the target directory.
+- **`coverage.rs` engine module** — `classify_dir()` derives annotation status from existing IR fields (`c4_level` + `description`), no IR schema changes needed.
+
+### Changed
+
+- **`ai-structure` render is now directories-only** — no longer lists individual files in the tree (use `ai-files` for that). Each directory shows a file count hint: `(N files)`, `(empty)`, or `(N files scaffold)`. Typical output reduced from ~200 lines to ~40-120.
+- **CLI restructured to noun-first** — all commands moved under three top-level nouns:
+  - `archidoc compile ir .` → `archidoc ir compile .`
+  - `archidoc compile scaffold <dir>` → `archidoc scaffold compile <dir>`
+  - `archidoc render <format> <source>` → `archidoc ir render <format> <source>`
+  - `archidoc validate <arch> <current>` → `archidoc ir validate <arch> <current>`
+  - `archidoc scaffold <name>` → `archidoc scaffold create <name>`
+  - `archidoc scaffold --list` → `archidoc scaffold list`
+  - `archidoc scaffold --inspect <name>` → `archidoc scaffold inspect <name>`
+  - `archidoc annotate ...` → unchanged
+- **`annotate` `<lang>` argument is now optional** — not required when using `--coverage`.
+
+### Removed
+
+- **All verb-first commands** — `compile`, `render`, `validate` as top-level commands are gone. Use `ir compile`, `ir render`, `ir validate`.
+- **`scaffold --list` and `scaffold --inspect` flags** — replaced by `scaffold list` and `scaffold inspect` subcommands.
+- **`archidoc init` command** — all four handlers replaced by existing commands:
+  - `init _index.md` → `archidoc annotate md . --recursive`
+  - `init c4-annotation` → `archidoc annotate rs/ts <dir>`
+  - `init root-annotation` → `archidoc annotate rs/ts .`
+  - `init tree` → `archidoc ir render ai-files .`
+- **`init_cmd/` engine module** — handler registry and dispatch removed.
+- **`init.rs`, `suggest.rs`, `scaffold.rs` engine modules** — dead code after init removal.
+- **`compact_human_tree()` and `walk_human()` tree functions** — human-readable tree output removed.
+- **`dir_annotation()` and `extension_summary()` context helpers** — replaced by inline logic in `walk_dirs_only()`.
+
 ## [0.4.0] - 2026-05-08
 
 ### Added

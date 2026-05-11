@@ -1,6 +1,6 @@
 {
   "name": "archidoc-md",
-  "version": "0.3.4",
+  "version": "0.5.0",
   "description": "Markdown adapter for archidoc — parses @c4 annotations from _index.md files and emits JSON IR",
   "type": "module",
   "main": "dist/index.js",

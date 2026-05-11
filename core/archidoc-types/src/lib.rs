@@ -10,12 +10,16 @@
 //! | `annotation.rs` | -- | Annotation spec enums | planned |
 
 pub mod annotation;
+pub mod ir;
 pub mod module_doc;
 pub mod report;
+pub mod scaffold_ir;
 
 pub use annotation::{HealthStatus, PatternStatus};
-pub use module_doc::{C4Level, FileEntry, ModuleDoc, Relationship};
+pub use ir::{ArchitectureIR, C4Level, DirNode, FileNode};
+pub use scaffold_ir::{ScaffoldIR, ScaffoldNode, ScaffoldPostHook, ScaffoldTemplate, ScaffoldVariable};
+pub use module_doc::{FileEntry, ModuleDoc, Relationship};
 pub use report::{
-    DriftReport, DriftedFile, ElementHealth, GhostEntry, HealthReport, OrphanEntry,
-    ValidationReport,
+    AnnotationStatus, CoverageReport, DirCoverage, DriftReport, DriftedFile, ElementHealth,
+    GhostEntry, HealthReport, OrphanEntry, ValidationReport,
 };

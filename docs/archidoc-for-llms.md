@@ -4,41 +4,45 @@ A structured reference for AI coding assistants to annotate any project with arc
 
 ## Quick Reference — Commands
 
-archidoc has two subcommands (`init` and `scaffold`) plus validation flags.
+archidoc has four subcommands: `compile`, `render`, `annotate`, `scaffold`, plus `validate`.
 
-### `archidoc .` — Generate architecture docs
+### `archidoc compile ir .` — Scan source → JSON IR
 
-Compiles `@c4` annotations from source code into `ARCHITECTURE.md` + `ARCHITECTURE.ai.md`.
+Extracts `@c4` annotations and directory structure into a JSON IR file.
 
 ```bash
-archidoc .                          # generate from source annotations
-archidoc . -o docs/ARCHITECTURE.md  # custom output path
-archidoc . --no-ai                  # skip ARCHITECTURE.ai.md
-archidoc . --plantuml --drawio      # also generate sidecar diagrams
+archidoc compile ir .                          # scan → _context/current.json
+archidoc compile ir . --design                 # → architecture.json (all health=planned)
 ```
 
-### `archidoc init <handler> [dir]` — Generate files from context
+### `archidoc render <format> <source>` — Produce documentation
 
-Reads the target directory and generates files using the named handler.
+Renders documentation from a JSON IR file or directory (auto-compiled).
 
 ```bash
-archidoc init --list                           # list all handlers
+archidoc render md _context/current.json       # human-readable architecture doc
+archidoc render ai ./src/                      # token-optimized module listing
+archidoc render context .                      # tree + strategy + health for LLMs
+archidoc render tree . --depth 3               # compact directory tree
+archidoc render files .                        # directory tree with files
+archidoc render plantuml _context/current.json # PlantUML C4 diagrams
+archidoc render drawio _context/current.json   # draw.io CSV import
+```
 
-archidoc init _index.md ./src/                 # generate _index.md stubs for dirs missing one
-archidoc init _index.md ./src/ --dry-run       # just list missing dirs
+### `archidoc annotate <lang> [dir]` — Add @c4 entry points + coverage
 
-archidoc init c4-annotation ./src/api/         # generate @c4 annotation block (stdout)
-archidoc init c4-annotation ./src/api/ >> src/api/mod.rs  # append to entry file
+Creates language-appropriate entry files with @c4 annotations.
 
-archidoc init root-annotation .                # generate root-level template (stdout)
-archidoc init root-annotation . --lang rust    # explicit language
-archidoc init root-annotation . --lang ts
+```bash
+archidoc annotate rs ./src/auth/               # create mod.rs with @c4 block
+archidoc annotate md . --recursive             # create _index.md in all subdirs
+archidoc annotate md . --recursive --depth 2   # limit recursive depth
+archidoc annotate rs ./src/ --dry-run          # preview without writing
+archidoc annotate rs ./src/ --force            # overwrite existing annotations
 
-archidoc init tree .                           # AI dir tree → _context/ARCHITECTURE.ai.tree.md
-archidoc init tree . --files                   # AI dir+files tree
-archidoc init tree . --human                   # human-readable tree with icons
-archidoc init tree . --both --human            # all three variants
-archidoc init tree . --depth 3                 # limit depth
+archidoc annotate --coverage .                 # annotation coverage report
+archidoc annotate --coverage . --depth 1       # coverage limited to top-level
+archidoc annotate --coverage _context/current.json  # coverage from existing IR
 ```
 
 ### `archidoc scaffold <name> [--target dir] [--var k=v]` — Folder templates
@@ -218,20 +222,21 @@ archidoc --health .      # View architecture health summary
 When annotating a new project, use these commands to bootstrap:
 
 ```bash
-# 1. Generate root-level template (paste into lib.rs / index.ts)
-archidoc init root-annotation .
+# 1. Annotate root entry file
+archidoc annotate rs .
 
-# 2. For each module directory, generate an annotation template
-archidoc init c4-annotation src/api/
-archidoc init c4-annotation src/database/
+# 2. Annotate all module directories recursively
+archidoc annotate rs . --recursive
 
-# 3. Generate _index.md for all directories
-archidoc init _index.md .
+# 3. For markdown-based projects, annotate with _index.md files
+archidoc annotate md . --recursive
 
-# 4. Compile and validate
-archidoc .
-archidoc --check .
-archidoc --validate .
+# 4. Check coverage to see what's left
+archidoc annotate --coverage .
+
+# 5. Compile and validate
+archidoc compile ir .
+archidoc render md _context/current.json --validate
 ```
 
 ## Templates

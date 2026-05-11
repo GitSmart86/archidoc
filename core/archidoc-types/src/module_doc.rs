@@ -1,37 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fmt;
 
 use crate::annotation::{HealthStatus, PatternStatus};
-
-/// C4 architecture level for a module.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum C4Level {
-    Container,
-    Component,
-    Unknown,
-}
-
-impl fmt::Display for C4Level {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Container => write!(f, "container"),
-            Self::Component => write!(f, "component"),
-            Self::Unknown => write!(f, "unknown"),
-        }
-    }
-}
-
-impl C4Level {
-    pub fn parse(s: &str) -> Self {
-        match s.trim().to_lowercase().as_str() {
-            "container" => Self::Container,
-            "component" => Self::Component,
-            _ => Self::Unknown,
-        }
-    }
-}
+pub use crate::ir::C4Level;
 
 /// A runtime dependency between modules.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

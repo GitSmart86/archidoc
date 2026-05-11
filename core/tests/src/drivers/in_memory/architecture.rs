@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
+use archidoc_types::ir::ArchitectureIR;
 use archidoc_types::{HealthReport, ModuleDoc, ValidationReport, DriftReport};
 use tempfile::TempDir;
 
@@ -15,13 +16,13 @@ use crate::fakes::fake_source_tree::FakeSourceTree;
 pub struct InMemoryArchitectureDriver {
     source_tree: FakeSourceTree,
     results: Vec<ModuleDoc>,
+    ir: Option<ArchitectureIR>,
     architecture_content: Option<String>,
     output_dir: TempDir,
     compiled: bool,
     ir_json: Option<String>,
-    suggestion_output: Option<String>,
     ir_snapshots: std::collections::HashMap<String, String>,
-    merged_results: Option<Vec<ModuleDoc>>,
+    merged_ir: Option<ArchitectureIR>,
 }
 
 impl InMemoryArchitectureDriver {
@@ -29,13 +30,13 @@ impl InMemoryArchitectureDriver {
         Self {
             source_tree: FakeSourceTree::new(),
             results: Vec::new(),
+            ir: None,
             architecture_content: None,
             output_dir: TempDir::new().expect("failed to create output temp dir"),
             compiled: false,
             ir_json: None,
-            suggestion_output: None,
             ir_snapshots: std::collections::HashMap::new(),
-            merged_results: None,
+            merged_ir: None,
         }
     }
 
@@ -63,12 +64,97 @@ impl InMemoryArchitectureDriver {
     }
 
     fn generate_architecture(&mut self) {
-        let link_base = self.output_dir.path().to_path_buf();
-        let content = archidoc_engine::architecture::generate(&self.results, &link_base, &[]);
+        let ir = self.ir.as_ref().expect("IR not built");
+        let content = archidoc_engine::architecture::generate(ir, &[]);
         fs::write(self.arch_file_path(), &content)
             .expect("failed to write ARCHITECTURE.md");
         self.architecture_content = Some(content);
     }
+
+    fn current_ir(&self) -> &ArchitectureIR {
+        self.ir.as_ref().expect("IR not built — call compile() first")
+    }
+}
+
+/// Convert an ArchitectureIR back to Vec<ModuleDoc> for legacy protocol driver methods.
+/// This is a test-only helper that replicates the deleted `to_module_docs()`.
+fn ir_to_module_docs(ir: &ArchitectureIR) -> Vec<ModuleDoc> {
+    use archidoc_types::module_doc::{FileEntry, Relationship as ModRelationship};
+
+    let mut docs = Vec::new();
+
+    fn collect(
+        node: &archidoc_types::ir::DirNode,
+        scan_root: &str,
+        is_root: bool,
+        out: &mut Vec<ModuleDoc>,
+    ) {
+        if node.is_annotated() {
+            let module_path = if is_root {
+                "_lib".to_string()
+            } else {
+                node.path.replace('/', ".")
+            };
+
+            let source_file = match &node.source_file {
+                Some(rel) => {
+                    let root = std::path::Path::new(scan_root);
+                    let native_rel = rel.replace('/', std::path::MAIN_SEPARATOR_STR);
+                    root.join(native_rel).to_string_lossy().to_string()
+                }
+                None => String::new(),
+            };
+
+            let files: Vec<FileEntry> = node
+                .files
+                .iter()
+                .filter(|f| f.health.is_some() || f.purpose.is_some() || f.pattern.is_some())
+                .map(|f| FileEntry {
+                    name: f.name.clone(),
+                    pattern: f.pattern.clone().unwrap_or_else(|| "--".to_string()),
+                    pattern_status: f.pattern_status.unwrap_or_default(),
+                    purpose: f.purpose.clone().unwrap_or_default(),
+                    health: f.health.unwrap_or_default(),
+                    extra: f.extra.clone(),
+                })
+                .collect();
+
+            let relationships: Vec<ModRelationship> = node
+                .relationships
+                .iter()
+                .map(|r| ModRelationship {
+                    target: r.target.clone(),
+                    label: r.label.clone(),
+                    protocol: r.protocol.clone(),
+                })
+                .collect();
+
+            let parent_container = node.parent.as_ref().map(|p| {
+                if p == "." { "_lib".to_string() } else { p.replace('/', ".") }
+            });
+
+            out.push(ModuleDoc {
+                module_path,
+                content: node.content.clone().unwrap_or_default(),
+                source_file,
+                c4_level: node.c4_level.unwrap_or(archidoc_types::C4Level::Unknown),
+                pattern: node.pattern.clone().unwrap_or_else(|| "--".to_string()),
+                pattern_status: node.pattern_status.unwrap_or_default(),
+                description: node.description.clone().unwrap_or_default(),
+                parent_container,
+                relationships,
+                files,
+            });
+        }
+
+        for child in &node.dirs {
+            collect(child, scan_root, false, out);
+        }
+    }
+
+    collect(&ir.root, &ir.scan_root, true, &mut docs);
+    docs.sort_by(|a, b| a.module_path.cmp(&b.module_path));
+    docs
 }
 
 impl ArchitectureDriver for InMemoryArchitectureDriver {
@@ -79,6 +165,13 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
     fn compile(&mut self) {
         let src_dir = self.source_tree.root().join("src");
         self.results = archidoc_rust::walker::extract_all_docs(&src_dir);
+        // Build IR from results
+        let ir = archidoc_engine::ir_builder::build_ir(
+            &src_dir,
+            archidoc_types::ir::DirNode::empty(".", "."),
+            self.results.clone(),
+        );
+        self.ir = Some(ir);
         self.generate_architecture();
         self.compiled = true;
     }
@@ -118,7 +211,7 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
 
     fn confirm_diagram_shows_container(&self, container: &str) {
         let content = self.arch_content();
-        let mermaid_id = container.replace('.', "_");
+        let mermaid_id = container.replace('.', "_").replace('/', "_");
         assert!(
             content.contains(&mermaid_id),
             "container diagram does not show '{}' (id: '{}'). Content:\n{}",
@@ -128,7 +221,7 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
 
     fn confirm_diagram_shows_component(&self, component: &str, inside: &str) {
         let content = self.arch_content();
-        let mermaid_id = component.replace('.', "_");
+        let mermaid_id = component.replace('.', "_").replace('/', "_");
         assert!(
             content.contains(&mermaid_id),
             "component diagram does not show '{}' (id: '{}'). Content:\n{}",
@@ -145,8 +238,8 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
 
     fn confirm_diagram_shows_dependency(&self, from: &str, to: &str) {
         let content = self.arch_content();
-        let from_id = from.replace('.', "_");
-        let to_id = to.replace('.', "_");
+        let from_id = from.replace('.', "_").replace('/', "_");
+        let to_id = to.replace('.', "_").replace('/', "_");
         let rel_pattern = format!("Rel({}, {}", from_id, to_id);
         assert!(
             content.contains(&rel_pattern),
@@ -300,7 +393,7 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
     // =========================================================================
 
     fn request_health_report(&self) -> HealthReport {
-        archidoc_engine::health::aggregate_health(&self.results)
+        archidoc_engine::health::aggregate_health(self.current_ir())
     }
 
     fn confirm_health_file_count(&self, maturity: &str, expected: usize) {
@@ -354,7 +447,7 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
     }
 
     fn validate(&self) -> ValidationReport {
-        archidoc_engine::validate::validate_file_tables(&self.results)
+        archidoc_engine::validate::validate_file_tables(self.current_ir())
     }
 
     fn confirm_ghost(&self, element: &str, filename: &str) {
@@ -404,8 +497,13 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
     fn check_for_drift(&self) -> DriftReport {
         let src_dir = self.source_tree.root().join("src");
         let fresh_docs = archidoc_rust::walker::extract_all_docs(&src_dir);
+        let fresh_ir = archidoc_engine::ir_builder::build_ir(
+            &src_dir,
+            archidoc_types::ir::DirNode::empty(".", "."),
+            fresh_docs,
+        );
         let link_base = self.output_dir.path().to_path_buf();
-        archidoc_engine::check::check_drift(&fresh_docs, &self.arch_file_path(), &link_base)
+        archidoc_engine::check::check_drift(&fresh_ir, &self.arch_file_path(), &link_base)
     }
 
     fn confirm_drift_detected(&self) {
@@ -433,7 +531,8 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
 
     fn emit_ir(&mut self) {
         assert!(self.compiled, "must compile before emitting IR");
-        self.ir_json = Some(archidoc_engine::ir::serialize(&self.results));
+        let ir = self.current_ir();
+        self.ir_json = Some(archidoc_engine::ir::serialize_ir(ir));
     }
 
     fn ir_json(&self) -> &str {
@@ -444,17 +543,19 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
 
     fn compile_from_ir(&mut self) {
         let json = self.ir_json().to_string();
-        let docs = archidoc_engine::ir::deserialize(&json)
+        let ir = archidoc_engine::ir::deserialize_ir(&json)
             .expect("failed to deserialize IR");
-        self.results = docs;
+        self.results = ir_to_module_docs(&ir);
+        self.ir = Some(ir);
         self.generate_architecture();
         self.compiled = true;
     }
 
     fn confirm_ir_contains_element(&self, name: &str, level: &str) {
         let json = self.ir_json();
-        let docs: Vec<ModuleDoc> = archidoc_engine::ir::deserialize(json)
+        let ir = archidoc_engine::ir::deserialize_ir(json)
             .expect("failed to parse IR for assertion");
+        let docs = ir_to_module_docs(&ir);
         let found = docs.iter().any(|d| d.module_path == name && d.c4_level.to_string() == level);
         assert!(
             found,
@@ -466,8 +567,9 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
 
     fn confirm_ir_round_trip_fidelity(&self) {
         let json = self.ir_json();
-        let round_tripped: Vec<ModuleDoc> = archidoc_engine::ir::deserialize(json)
+        let ir = archidoc_engine::ir::deserialize_ir(json)
             .expect("failed to deserialize IR for round-trip check");
+        let round_tripped = ir_to_module_docs(&ir);
 
         assert_eq!(
             self.results.len(),
@@ -488,12 +590,12 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
 
     fn confirm_ir_schema_valid(&self) {
         let json = self.ir_json();
-        archidoc_engine::ir::validate(json)
+        archidoc_engine::ir::deserialize_ir(json)
             .expect("IR schema validation failed");
     }
 
     fn confirm_ir_rejects(&self, json: &str) {
-        let result = archidoc_engine::ir::validate(json);
+        let result = archidoc_engine::ir::deserialize_ir(json);
         assert!(
             result.is_err(),
             "expected malformed IR to be rejected but it was accepted"
@@ -510,19 +612,19 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
         let path = self.output_dir.path().join("ir_export.json");
         let json = fs::read_to_string(&path)
             .expect("failed to read IR from file — was write_ir_to_file called?");
-        let docs = archidoc_engine::ir::deserialize(&json)
+        let ir = archidoc_engine::ir::deserialize_ir(&json)
             .expect("failed to deserialize IR from file");
-        self.results = docs;
+        self.results = ir_to_module_docs(&ir);
+        self.ir = Some(ir);
         self.generate_architecture();
         self.compiled = true;
     }
 
     fn confirm_ir_idempotent(&mut self) {
         let first_ir = self.ir_json().to_string();
-        let docs = archidoc_engine::ir::deserialize(&first_ir)
+        let ir = archidoc_engine::ir::deserialize_ir(&first_ir)
             .expect("failed to deserialize first IR");
-        self.results = docs;
-        let second_ir = archidoc_engine::ir::serialize(&self.results);
+        let second_ir = archidoc_engine::ir::serialize_ir(&ir);
         assert_eq!(
             first_ir, second_ir,
             "IR is not idempotent — second emission differs from first"
@@ -575,67 +677,38 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
     }
 
     // =========================================================================
-    // Phase L — Annotation scaffolding
-    // =========================================================================
-
-    fn suggest_for(&mut self, element: &str) {
-        let module_dir = self.source_tree.module_dir(element);
-        self.suggestion_output = Some(archidoc_engine::suggest::suggest_annotation(&module_dir, None));
-    }
-
-    fn suggestion_output(&self) -> &str {
-        self.suggestion_output
-            .as_deref()
-            .expect("suggestion not generated yet — call suggest_for() first")
-    }
-
-    fn confirm_suggestion_level(&self, level: &str) {
-        let output = self.suggestion_output();
-        let marker = format!("@c4 {}", level);
-        assert!(
-            output.contains(&marker),
-            "suggestion does not contain level '{}' (looked for '{}'). Output:\n{}",
-            level, marker, output
-        );
-    }
-
-    fn confirm_suggestion_lists_file(&self, filename: &str) {
-        let output = self.suggestion_output();
-        let pattern = format!("`{}`", filename);
-        assert!(
-            output.contains(&pattern),
-            "suggestion does not list file '{}'. Output:\n{}",
-            filename, output
-        );
-    }
-
-    // =========================================================================
     // Phase L — IR merging
     // =========================================================================
 
     fn save_ir_snapshot(&mut self, name: &str) {
         assert!(self.compiled, "must compile before saving IR snapshot");
-        let json = archidoc_engine::ir::serialize(&self.results);
+        let ir = self.current_ir();
+        let json = archidoc_engine::ir::serialize_ir(ir);
         self.ir_snapshots.insert(name.to_string(), json);
     }
 
     fn merge_ir_snapshots(&mut self, names: &[&str]) {
-        let ir_sets: Vec<Vec<ModuleDoc>> = names.iter().map(|name| {
+        let mut irs: Vec<ArchitectureIR> = names.iter().map(|name| {
             let json = self.ir_snapshots.get(*name)
                 .unwrap_or_else(|| panic!("IR snapshot '{}' not found", name));
-            archidoc_engine::ir::deserialize(json)
+            archidoc_engine::ir::deserialize_ir(json)
                 .unwrap_or_else(|e| panic!("failed to deserialize snapshot '{}': {}", name, e))
         }).collect();
 
-        match archidoc_engine::merge::merge_ir(ir_sets) {
-            Ok(docs) => self.merged_results = Some(docs),
-            Err(e) => panic!("merge failed: {}", e),
+        let mut merged = irs.remove(0);
+        for ir in irs {
+            match archidoc_engine::merge::merge_ir(merged, ir) {
+                Ok(m) => merged = m,
+                Err(e) => panic!("merge failed: {}", e),
+            }
         }
+        self.merged_ir = Some(merged);
     }
 
     fn confirm_merged_element_count(&self, expected: usize) {
-        let merged = self.merged_results.as_ref()
+        let merged_ir = self.merged_ir.as_ref()
             .expect("no merged results — call merge_ir_snapshots first");
+        let merged = ir_to_module_docs(merged_ir);
         assert_eq!(
             merged.len(), expected,
             "expected {} merged elements, got {}. Elements: {:?}",
@@ -645,8 +718,9 @@ impl ArchitectureDriver for InMemoryArchitectureDriver {
     }
 
     fn confirm_merged_contains(&self, name: &str, level: &str) {
-        let merged = self.merged_results.as_ref()
+        let merged_ir = self.merged_ir.as_ref()
             .expect("no merged results — call merge_ir_snapshots first");
+        let merged = ir_to_module_docs(merged_ir);
         let found = merged.iter().any(|d| d.module_path == name && d.c4_level.to_string() == level);
         assert!(
             found,

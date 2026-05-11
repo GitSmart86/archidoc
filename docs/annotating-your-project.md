@@ -12,11 +12,11 @@ A step-by-step guide for adopting archidoc on an existing codebase.
 Before annotating individual modules, set up the project-level narrative. This captures the high-level context that no single module can express — data flow, concurrency model, deployment targets, and external dependencies.
 
 ```bash
-archidoc init root-annotation .              # auto-detects Rust or TypeScript
-archidoc init root-annotation . --lang rust  # explicit
+archidoc annotate rs .                       # Rust — creates lib.rs with @c4 block
+archidoc annotate ts .                       # TypeScript — creates index.ts with @c4 block
 ```
 
-This prints a `lib.rs` doc comment template to stdout with TODO placeholders:
+This creates an entry file with a `@c4` annotation block and TODO placeholders:
 
 ```rust
 //! @c4 container
@@ -58,7 +58,7 @@ This prints a `lib.rs` doc comment template to stdout with TODO placeholders:
 //! - TODO: Databases and storage systems
 ```
 
-Paste this into your root entry file (`lib.rs` or `index.ts`) and fill in the TODOs. These sections become part of `ARCHITECTURE.md`. The C4 Context mermaid diagram renders in the human-readable output but is automatically excluded from `ARCHITECTURE.ai.md` (the token-optimized AI format).
+Open the generated entry file (`lib.rs` or `index.ts`) and fill in the TODOs. These sections become part of `ARCHITECTURE.md`. The C4 Context mermaid diagram renders in the human-readable output but is automatically excluded from `ARCHITECTURE.ai.md` (the token-optimized AI format).
 
 You can skip this step and add it later — archidoc works fine without it.
 
@@ -88,8 +88,8 @@ Start with 3-5 containers. You can always add more later.
 You can scaffold an annotation template automatically:
 
 ```bash
-archidoc init c4-annotation src/api/               # prints template to stdout
-archidoc init c4-annotation src/api/ >> src/api/mod.rs   # append directly to the entry file
+archidoc annotate rs src/api/                       # creates mod.rs with @c4 block
+archidoc annotate rs src/api/ --dry-run             # preview without writing
 ```
 
 Or write it by hand. Open the entry file for your first container (`mod.rs` for Rust, `index.ts` for TypeScript) and add the annotation block.

@@ -221,22 +221,177 @@ pub fn compact_files_tree(root: &Path, max_depth: Option<usize>, config: &TreeCo
     out
 }
 
-/// Generate a human-readable indented tree with emoji icons.
+/// Build a bare `DirNode` tree from a live directory tree.
 ///
-/// Format:
-/// ```text
-/// - 📁 .
-///   - 📖 CLAUDE.md
-///   - 📁 0_White
-///     - 📖 _index.md
-///     - 📁 Framework
-///       ...
-/// ```
+/// Uses the same filtering rules as `compact_dirs_tree` / `compact_files_tree`.
+/// Strategy fields are left as `None` — populated later by annotation overlay.
+pub fn build_dir_tree(
+    root: &Path,
+    config: &TreeConfig,
+) -> archidoc_types::ir::DirNode {
+    use archidoc_types::ir::{DirNode, FileNode};
+
+    fn build_node(root: &Path, dir: &Path, config: &TreeConfig) -> DirNode {
+        let name = if dir == root {
+            ".".to_string()
+        } else {
+            dir.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("?")
+                .to_string()
+        };
+
+        let path = if dir == root {
+            ".".to_string()
+        } else {
+            dir.strip_prefix(root)
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .unwrap_or_else(|_| name.clone())
+        };
+
+        let file_names = collect_files(dir, config);
+        let files: Vec<FileNode> = file_names.into_iter().map(|n| FileNode::bare(&n)).collect();
+
+        let mut subdirs = read_subdirs(dir, config);
+        subdirs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
+        let dirs: Vec<DirNode> = subdirs
+            .iter()
+            .map(|subdir| build_node(root, subdir, config))
+            .collect();
+
+        DirNode {
+            name,
+            path,
+            c4_level: None,
+            description: None,
+            pattern: None,
+            pattern_status: None,
+            content: None,
+            source_file: None,
+            parent: None,
+            relationships: Vec::new(),
+            dirs,
+            files,
+        }
+    }
+
+    build_node(root, root, config)
+}
+
+/// Render a dirs-only compact tree from a `DirNode`.
 ///
-/// Icons are configured in `.archidoc/config.tree.json` under the `icons` key.
-pub fn compact_human_tree(root: &Path, max_depth: Option<usize>, config: &TreeConfig) -> String {
+/// Produces the same format as `compact_dirs_tree` but reads from the
+/// pre-built IR tree rather than the live filesystem.
+pub fn render_dirs_tree(
+    root: &archidoc_types::ir::DirNode,
+    max_depth: Option<usize>,
+) -> String {
+    use archidoc_types::ir::DirNode;
+
+    fn walk(out: &mut String, node: &DirNode, depth: usize, max_depth: Option<usize>) {
+        if node.dirs.is_empty() {
+            return; // leaf — appears only in parent's brace list
+        }
+        let child_names: Vec<String> = node.dirs.iter().map(|c| c.name.clone()).collect();
+        out.push_str(&format!("{}/ {{{}}}\n", node.path, child_names.join(", ")));
+
+        if let Some(max) = max_depth {
+            if depth >= max {
+                return;
+            }
+        }
+
+        for child in &node.dirs {
+            walk(out, child, depth + 1, max_depth);
+        }
+    }
+
     let mut out = String::new();
-    walk_human(&mut out, root, root, 0, max_depth, config);
+    walk(&mut out, root, 0, max_depth);
+    out
+}
+
+/// Render a dirs+files compact tree from a `DirNode`.
+///
+/// Produces the same format as `compact_files_tree` but reads from the
+/// pre-built IR tree rather than the live filesystem.
+pub fn render_files_tree(
+    root: &archidoc_types::ir::DirNode,
+    max_depth: Option<usize>,
+    config: &TreeConfig,
+) -> String {
+    use archidoc_types::ir::DirNode;
+
+    fn file_names(node: &DirNode) -> Vec<String> {
+        node.files.iter().map(|f| f.name.clone()).collect()
+    }
+
+    fn try_node_collapse(children: &[DirNode]) -> Option<SiblingCollapse> {
+        if children.len() < 3 {
+            return None;
+        }
+        for child in children {
+            if !child.dirs.is_empty() {
+                return None; // not a leaf
+            }
+            if child.files.is_empty() {
+                return None;
+            }
+        }
+        let first = file_names(&children[0]);
+        if !children.iter().all(|c| file_names(c) == first) {
+            return None;
+        }
+        Some(SiblingCollapse {
+            names: children.iter().map(|c| c.name.clone()).collect(),
+            files: first,
+        })
+    }
+
+    fn walk(
+        out: &mut String,
+        node: &DirNode,
+        depth: usize,
+        max_depth: Option<usize>,
+        config: &TreeConfig,
+    ) {
+        if let Some(max) = max_depth {
+            if depth >= max {
+                return;
+            }
+        }
+
+        if let Some(collapse) = try_node_collapse(&node.dirs) {
+            out.push_str(&format!(
+                "{}/{{{}}}/  [each: {}]\n",
+                node.path,
+                collapse.names.join(", "),
+                collapse.files.join(", ")
+            ));
+            return;
+        }
+
+        for child in &node.dirs {
+            let child_files = file_names(child);
+            let suffix = format_file_suffix(&child_files, config);
+            if suffix.is_empty() {
+                out.push_str(&format!("{}/\n", child.path));
+            } else {
+                out.push_str(&format!("{}/{}\n", child.path, suffix));
+            }
+            walk(out, child, depth + 1, max_depth, config);
+        }
+    }
+
+    let mut out = String::new();
+
+    let root_files = file_names(root);
+    if !root_files.is_empty() {
+        out.push_str(&format!("[root] {}\n", root_files.join(", ")));
+    }
+
+    walk(&mut out, root, 0, max_depth, config);
     out
 }
 
@@ -339,46 +494,6 @@ fn walk_files(
         }
 
         walk_files(out, root, &subdir, depth + 1, max_depth, config);
-    }
-}
-
-fn walk_human(
-    out: &mut String,
-    root: &Path,
-    dir: &Path,
-    depth: usize,
-    max_depth: Option<usize>,
-    config: &TreeConfig,
-) {
-    let indent = "  ".repeat(depth);
-    let dir_name = if dir == root {
-        ".".to_string()
-    } else {
-        dir.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("?")
-            .to_string()
-    };
-
-    out.push_str(&format!("{}- {} {}\n", indent, config.icons.directory, dir_name));
-
-    // Files directly in this dir (sorted)
-    let files = collect_files(dir, config);
-    for file in &files {
-        let icon = icon_for_file(file, config);
-        out.push_str(&format!("{}  - {} {}\n", indent, icon, file));
-    }
-
-    if let Some(max) = max_depth {
-        if depth >= max {
-            return;
-        }
-    }
-
-    let mut subdirs = read_subdirs(dir, config);
-    subdirs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
-    for subdir in subdirs {
-        walk_human(out, root, &subdir, depth + 1, max_depth, config);
     }
 }
 
@@ -520,16 +635,3 @@ fn dir_rel(root: &Path, dir: &Path) -> String {
     }
 }
 
-/// Resolve the emoji icon for a filename based on its extension.
-fn icon_for_file(name: &str, config: &TreeConfig) -> String {
-    let ext = Path::new(name)
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| format!(".{}", e));
-    if let Some(ref ext) = ext {
-        if let Some(icon) = config.icons.by_ext.get(ext) {
-            return icon.clone();
-        }
-    }
-    config.icons.file.clone()
-}

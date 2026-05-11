@@ -1,6 +1,6 @@
 # archidoc
 
-Architecture documentation compiler. Generates C4 diagrams (Mermaid, PlantUML, draw.io) from source code annotations.
+Architecture documentation compiler. Extracts C4 structure from source annotations, produces documentation and LLM context, validates architecture conformance.
 
 This npm package downloads the native `archidoc` binary and includes the TypeScript adapter (`archidoc-ts`). One install gives you full polyglot support for Rust + TypeScript projects.
 
@@ -13,27 +13,29 @@ npm install -D archidoc
 ## Usage
 
 ```bash
-# Generate ARCHITECTURE.md from source annotations
-npx archidoc .
+# Scan source → JSON IR
+npx archidoc compile ir .
 
-# Check for documentation drift (CI gate)
-npx archidoc --check .
+# Render documentation (from IR or directory)
+npx archidoc render md _context/current.json
+npx archidoc render context ./src/
+npx archidoc render ai _context/current.json
 
-# Architecture health report
-npx archidoc --health .
+# Validate architecture conformance
+npx archidoc validate _context/architecture.json _context/current.json
 
-# Validate file tables
-npx archidoc --validate .
+# Scaffold a project template
+npx archidoc scaffold --list
 ```
 
-For polyglot projects (Rust + TypeScript), `archidoc` auto-detects both languages, runs the appropriate adapters, and merges the results. No manual steps needed.
+For polyglot projects (Rust + TypeScript), `archidoc` auto-detects both languages, runs the appropriate adapters, and merges the results.
 
 ## How It Works
 
-1. On `npm install`, the postinstall script downloads the prebuilt native binary for your platform from [GitHub Releases](https://github.com/GitSmart86/archidoc/releases)
+1. On `npm install`, the postinstall script downloads the prebuilt native binary for your platform
 2. The `archidoc-ts` TypeScript adapter is included as a dependency
-3. When you run `archidoc .`, it auto-detects TypeScript sources (via `package.json`) and runs `archidoc-ts` internally
-4. Results from all language adapters are merged into unified architecture documentation
+3. When you run `archidoc compile ir .`, it auto-detects TypeScript sources and runs `archidoc-ts` internally
+4. Results from all language adapters are merged into a unified ArchitectureIR v2.0
 
 ## Supported Platforms
 
@@ -43,20 +45,16 @@ For polyglot projects (Rust + TypeScript), `archidoc` auto-detects both language
 | macOS | x64, arm64 |
 | Windows | x64 |
 
-## Alternative Install Methods
+## Alternative Install
 
 ```bash
-# From crates.io (requires Rust toolchain)
+# From crates.io (requires Rust)
 cargo install archidoc-cli
 
 # From source
 git clone https://github.com/GitSmart86/archidoc
 cd archidoc && cargo install --path core/archidoc-cli
 ```
-
-## Documentation
-
-See the [archidoc repository](https://github.com/GitSmart86/archidoc) for the full annotation convention, CLI reference, and language adapter details.
 
 ## License
 

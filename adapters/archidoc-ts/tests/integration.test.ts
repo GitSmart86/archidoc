@@ -1,63 +1,101 @@
 import { describe, it, expect } from "vitest";
 import * as path from "node:path";
-import * as fs from "node:fs";
-import { extractAllDocs } from "../src/walker.js";
-import type { ModuleDoc } from "../src/types.js";
+import { extractIR } from "../src/walker.js";
+import type { ArchitectureIR, DirNode } from "../src/types.js";
 
-describe("JSON IR output", () => {
+describe("ArchitectureIR v2.0 output", () => {
   const fixturesDir = path.resolve(import.meta.dirname, "fixtures");
 
-  it("produces valid JSON matching IR schema structure", () => {
-    const docs = extractAllDocs(fixturesDir);
-    const json = JSON.stringify(docs, null, 2);
-    const parsed: ModuleDoc[] = JSON.parse(json);
+  it("produces valid JSON matching IR v2.0 schema", () => {
+    const ir = extractIR(fixturesDir);
+    const json = JSON.stringify(ir, null, 2);
+    const parsed: ArchitectureIR = JSON.parse(json);
 
-    expect(Array.isArray(parsed)).toBe(true);
-    for (const doc of parsed) {
-      // Required fields exist
-      expect(doc).toHaveProperty("module_path");
-      expect(doc).toHaveProperty("content");
-      expect(doc).toHaveProperty("source_file");
-      expect(doc).toHaveProperty("c4_level");
-      expect(doc).toHaveProperty("pattern");
-      expect(doc).toHaveProperty("pattern_status");
-      expect(doc).toHaveProperty("description");
-      expect(doc).toHaveProperty("parent_container");
-      expect(doc).toHaveProperty("relationships");
-      expect(doc).toHaveProperty("files");
+    // Top-level fields
+    expect(parsed.version).toBe("2.0");
+    expect(parsed.scan_root).toBeTruthy();
+    expect(parsed.root).toBeDefined();
+    expect(parsed.root.name).toBe(".");
+    expect(parsed.root.path).toBe(".");
+  });
 
-      // Enum constraints
-      expect(["container", "component", "unknown"]).toContain(doc.c4_level);
-      expect(["planned", "verified"]).toContain(doc.pattern_status);
+  it("annotated DirNodes have correct fields", () => {
+    const ir = extractIR(fixturesDir);
 
-      for (const rel of doc.relationships) {
-        expect(rel).toHaveProperty("target");
-        expect(rel).toHaveProperty("label");
-        expect(rel).toHaveProperty("protocol");
+    function collectAnnotated(node: DirNode): DirNode[] {
+      const result: DirNode[] = [];
+      if (node.c4_level !== undefined) result.push(node);
+      for (const child of node.dirs ?? []) {
+        result.push(...collectAnnotated(child));
+      }
+      return result;
+    }
+
+    const annotated = collectAnnotated(ir.root);
+    expect(annotated.length).toBeGreaterThan(0);
+
+    for (const dir of annotated) {
+      expect(dir.name).toBeTruthy();
+      expect(dir.path).toBeTruthy();
+      expect(["container", "component"]).toContain(dir.c4_level);
+      expect(dir.description).toBeTruthy();
+      expect(dir.source_file).toBeTruthy();
+
+      // Relationships if present
+      if (dir.relationships) {
+        for (const rel of dir.relationships) {
+          expect(rel.target).toBeTruthy();
+          expect(rel.label).toBeTruthy();
+          expect(rel.protocol).toBeTruthy();
+        }
       }
 
-      for (const file of doc.files) {
-        expect(file).toHaveProperty("name");
-        expect(file).toHaveProperty("pattern");
-        expect(file).toHaveProperty("pattern_status");
-        expect(file).toHaveProperty("purpose");
-        expect(file).toHaveProperty("health");
-        expect(["planned", "verified"]).toContain(file.pattern_status);
-        expect(["planned", "active", "stable"]).toContain(file.health);
+      // Files with health if present
+      if (dir.files) {
+        for (const file of dir.files) {
+          expect(file.name).toBeTruthy();
+          if (file.health !== undefined) {
+            expect(["planned", "active", "stable"]).toContain(file.health);
+          }
+          if (file.pattern_status !== undefined) {
+            expect(["planned", "verified"]).toContain(file.pattern_status);
+          }
+        }
       }
     }
   });
 
   it("round-trips through JSON serialization", () => {
-    const docs = extractAllDocs(fixturesDir);
-    const json = JSON.stringify(docs);
-    const parsed: ModuleDoc[] = JSON.parse(json);
-    expect(parsed).toEqual(docs);
+    const ir = extractIR(fixturesDir);
+    const json = JSON.stringify(ir);
+    const parsed: ArchitectureIR = JSON.parse(json);
+    expect(parsed).toEqual(ir);
   });
 
   it("produces consistent output across runs", () => {
-    const run1 = extractAllDocs(fixturesDir);
-    const run2 = extractAllDocs(fixturesDir);
+    const run1 = extractIR(fixturesDir);
+    const run2 = extractIR(fixturesDir);
     expect(JSON.stringify(run1)).toBe(JSON.stringify(run2));
+  });
+
+  it("unannotated dirs have no strategy fields", () => {
+    const ir = extractIR(fixturesDir);
+
+    function findUnannotated(node: DirNode): DirNode | undefined {
+      if (node.c4_level === undefined && node.path !== ".") return node;
+      for (const child of node.dirs ?? []) {
+        const found = findUnannotated(child);
+        if (found) return found;
+      }
+      return undefined;
+    }
+
+    // May not have unannotated dirs in fixtures, but if we do, verify
+    const unannotated = findUnannotated(ir.root);
+    if (unannotated) {
+      expect(unannotated.c4_level).toBeUndefined();
+      expect(unannotated.description).toBeUndefined();
+      expect(unannotated.content).toBeUndefined();
+    }
   });
 });

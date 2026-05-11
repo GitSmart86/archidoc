@@ -6,7 +6,7 @@ archidoc is a C4 architecture documentation compiler. It extracts `@c4` annotati
 
 ## Commands
 
-archidoc has **two subcommands** plus validation flags and a shorthand:
+archidoc has **four subcommands** plus validation flags:
 
 ### `archidoc .` — Compile architecture docs (shorthand)
 
@@ -19,19 +19,20 @@ archidoc . --no-ai                  # skip AI context file
 archidoc . --plantuml --drawio      # sidecar diagrams
 ```
 
-### `archidoc init <handler> [dir]` — Generate files from context
+### `archidoc annotate <lang> [dir]` — Add @c4 entry points + coverage
 
-Reads a directory and generates files using a named handler.
+Creates language-appropriate entry files with @c4 annotations.
 
 ```bash
-archidoc init --list                          # list handlers
-archidoc init _index.md ./src/                # _index.md stubs for all dirs missing one
-archidoc init _index.md ./src/ --dry-run      # list missing dirs
-archidoc init c4-annotation ./src/api/        # @c4 annotation template (stdout)
-archidoc init root-annotation .               # root-level lib.rs/index.ts template (stdout)
-archidoc init tree .                          # dir tree → _context/ARCHITECTURE.ai.tree.md
-archidoc init tree . --files --human --both   # all tree variants
-archidoc init tree . --depth 3               # limit depth
+archidoc annotate rs ./src/auth/              # create mod.rs with @c4 block
+archidoc annotate md . --recursive            # create _index.md in all subdirs
+archidoc annotate md . --recursive --depth 2  # limit recursive depth
+archidoc annotate ts ./src/api/ --dry-run     # preview without writing
+archidoc annotate rs ./src/ --force           # overwrite existing annotations
+
+archidoc annotate --coverage .                # annotation coverage report
+archidoc annotate --coverage . --depth 1      # coverage limited to top-level
+archidoc annotate --coverage _context/current.json  # coverage from existing IR
 ```
 
 ### `archidoc scaffold <name> [--target dir] [--var k=v]` — Folder templates
@@ -65,7 +66,7 @@ All validation commands accept `--json` for machine-readable output.
 ```
 core/
   archidoc-types/       Shared domain types (ModuleDoc, C4Level, FileEntry, Relationship)
-  archidoc-engine/      Generator engine + init handlers + folder scaffold
+  archidoc-engine/      Generator engine + coverage + scaffold template engine
   archidoc-cli/         CLI binary (clap 4 derive)
   spec/                 JSON IR schema
   tests/                BDD test infrastructure
@@ -84,10 +85,9 @@ adapters/
 | `check.rs` | Drift detection (byte-compare generated vs committed) |
 | `health.rs` | Health report (planned/active/stable counts) |
 | `validate.rs` | Ghost/orphan file detection |
-| `scaffold.rs` | _index.md stub generation |
+| `coverage.rs` | Annotation coverage report (populated/stub/unannotated) |
 | `tree.rs` | Directory tree generation |
-| `init_cmd/` | Init handler registry (dispatches `archidoc init <handler>`) |
-| `folder_scaffold/` | Folder template engine (discovers, substitutes, executes) |
+| `scaffold_ir/` | Scaffold template engine (discovers, substitutes, executes) |
 | `custom.rs` | Template loading + `{{token}}` substitution |
 
 ## Annotation Convention
@@ -118,10 +118,6 @@ cargo install --path core/archidoc-cli  # install binary
 ```
 
 ## Template System
-
-### Init overrides (`.archidoc/init-overrides/`)
-
-Override the default output of built-in init handlers. Only files matching known handler output names are recognized: `_index.md`, `mod.rs`, `index.ts`, `architecture-table.md`. Unknown files are ignored.
 
 ### Scaffold templates (`.archidoc/scaffold-templates/`)
 

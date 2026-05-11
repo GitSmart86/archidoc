@@ -2,30 +2,34 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use archidoc_types::{C4Level, ModuleDoc};
+use archidoc_types::ir::{ArchitectureIR, DirNode};
+use archidoc_types::C4Level;
 
 /// Generate draw.io container CSV.
-pub fn generate_container_csv(output_dir: &Path, docs: &[ModuleDoc]) {
+pub fn generate_container_csv(output_dir: &Path, ir: &ArchitectureIR) {
     let filepath = output_dir.join("c4-container.csv");
 
-    let containers: Vec<&ModuleDoc> = docs
+    let all_annotated = ir.annotated_dirs();
+    let containers: Vec<&DirNode> = all_annotated
         .iter()
-        .filter(|d| d.c4_level == C4Level::Container)
+        .copied()
+        .filter(|d| d.c4_level == Some(C4Level::Container))
         .collect();
 
     let mut rows = Vec::new();
 
-    // Build a map of module_path -> list of relationship targets
-    for doc in &containers {
-        let refs: Vec<String> = doc.relationships.iter().map(|r| r.target.clone()).collect();
+    for dir in &containers {
+        let refs: Vec<String> = dir.relationships.iter().map(|r| r.target.clone()).collect();
         let refs_str = refs.join(",");
+        let pattern = dir.pattern.as_deref().unwrap_or("--");
+        let desc = dir.description.as_deref().unwrap_or("");
 
         rows.push(format!(
             "{},{},container,{},{},{}",
-            doc.module_path,
-            to_title_case(&doc.module_path),
-            doc.pattern,
-            doc.description,
+            dir.path,
+            to_title_case(&dir.name),
+            pattern,
+            desc,
             refs_str,
         ));
     }
@@ -40,22 +44,24 @@ pub fn generate_container_csv(output_dir: &Path, docs: &[ModuleDoc]) {
 }
 
 /// Generate draw.io component CSV.
-pub fn generate_component_csv(output_dir: &Path, docs: &[ModuleDoc]) {
+pub fn generate_component_csv(output_dir: &Path, ir: &ArchitectureIR) {
     let filepath = output_dir.join("c4-component.csv");
 
-    let components: Vec<&ModuleDoc> = docs
+    let all_annotated = ir.annotated_dirs();
+    let components: Vec<&DirNode> = all_annotated
         .iter()
-        .filter(|d| d.c4_level == C4Level::Component)
+        .copied()
+        .filter(|d| d.c4_level == Some(C4Level::Component))
         .collect();
 
     // Group by parent
-    let mut grouped: BTreeMap<String, Vec<&ModuleDoc>> = BTreeMap::new();
-    for doc in &components {
-        let parent = doc
-            .parent_container
+    let mut grouped: BTreeMap<String, Vec<&DirNode>> = BTreeMap::new();
+    for dir in &components {
+        let parent = dir
+            .parent
             .clone()
             .unwrap_or_else(|| "other".to_string());
-        grouped.entry(parent).or_default().push(doc);
+        grouped.entry(parent).or_default().push(dir);
     }
 
     let mut rows = Vec::new();
@@ -65,29 +71,24 @@ pub fn generate_component_csv(output_dir: &Path, docs: &[ModuleDoc]) {
         rows.push(format!(
             "{},{},container,,,",
             parent,
-            to_title_case(parent),
+            to_title_case(parent.split('/').last().unwrap_or(parent)),
         ));
     }
 
     // Add components
-    for doc in &components {
-        let name = doc
-            .module_path
-            .split('.')
-            .last()
-            .unwrap_or(&doc.module_path);
-        let parent = doc
-            .parent_container
-            .as_deref()
-            .unwrap_or("");
-        let refs: Vec<String> = doc.relationships.iter().map(|r| r.target.clone()).collect();
+    for dir in &components {
+        let name = &dir.name;
+        let parent = dir.parent.as_deref().unwrap_or("");
+        let pattern = dir.pattern.as_deref().unwrap_or("--");
+        let desc = dir.description.as_deref().unwrap_or("");
+        let refs: Vec<String> = dir.relationships.iter().map(|r| r.target.clone()).collect();
 
         rows.push(format!(
             "{},{},component,{},{},{}",
-            doc.module_path,
+            dir.path,
             name,
-            doc.pattern,
-            doc.description,
+            pattern,
+            desc,
             if refs.is_empty() {
                 parent.to_string()
             } else {
@@ -123,10 +124,7 @@ fn csv_header() -> &'static str {
 }
 
 fn to_title_case(s: &str) -> String {
-    s.split('.')
-        .last()
-        .unwrap_or(s)
-        .split('_')
+    s.split('_')
         .map(|word| {
             let mut chars = word.chars();
             match chars.next() {
