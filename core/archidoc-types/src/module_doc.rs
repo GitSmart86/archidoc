@@ -38,6 +38,8 @@ pub struct ModuleDoc {
     pub pattern_status: PatternStatus,
     pub description: String,
     pub parent_container: Option<String>,
+    #[serde(default)]
+    pub layer: Option<String>,
     pub relationships: Vec<Relationship>,
     pub files: Vec<FileEntry>,
 }

@@ -77,6 +77,9 @@ pub struct DirNode {
     /// Nearest annotated ancestor's path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
+    /// Architecture layer (`@c4 layer`) — groups components in the diagram.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<String>,
 
     // -- Relationships --
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -209,6 +212,7 @@ impl DirNode {
             content: None,
             source_file: None,
             parent: None,
+            layer: None,
             relationships: Vec::new(),
             dirs: Vec::new(),
             files: Vec::new(),
