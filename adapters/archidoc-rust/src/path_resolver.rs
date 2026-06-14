@@ -13,7 +13,24 @@ pub fn path_to_module_name(path: &Path, root: &Path, filename: &str) -> String {
     let parent = relative.parent().unwrap_or(Path::new(""));
 
     if filename == "lib.rs" {
-        return "_lib".to_string();
+        // A crate-root `lib.rs`. In a single-crate scan it sits at the scan root
+        // and maps to `_lib`. In a multi-crate workspace scan every crate has its
+        // own `<crate>/src/lib.rs`; derive a unique module path from the crate
+        // directory (stripping a trailing `src`) so the crates don't all collide
+        // on `_lib` and overwrite each other in the doc map.
+        let crate_dir = match parent.file_name().and_then(|n| n.to_str()) {
+            Some("src") => parent.parent().unwrap_or(Path::new("")),
+            _ => parent,
+        };
+        let parts: Vec<&str> = crate_dir
+            .components()
+            .filter_map(|c| c.as_os_str().to_str())
+            .collect();
+        return if parts.is_empty() {
+            "_lib".to_string()
+        } else {
+            parts.join(".")
+        };
     }
 
     // Convert path components to dot notation
@@ -67,6 +84,21 @@ mod tests {
         let root = PathBuf::from("/src");
         let path = PathBuf::from("/src/lib.rs");
         assert_eq!(path_to_module_name(&path, &root, "lib.rs"), "_lib");
+    }
+
+    #[test]
+    fn test_workspace_crate_lib_rs() {
+        // Each crate's `<crate>/src/lib.rs` gets a unique, crate-scoped module
+        // name instead of all colliding on `_lib`.
+        let root = PathBuf::from("/ws");
+        assert_eq!(
+            path_to_module_name(&PathBuf::from("/ws/holon-core/src/lib.rs"), &root, "lib.rs"),
+            "holon-core"
+        );
+        assert_eq!(
+            path_to_module_name(&PathBuf::from("/ws/crates/holon-turso/src/lib.rs"), &root, "lib.rs"),
+            "crates.holon-turso"
+        );
     }
 
     #[test]
