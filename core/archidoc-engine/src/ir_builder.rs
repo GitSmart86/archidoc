@@ -167,6 +167,9 @@ fn overlay_module(tree: &mut DirNode, target_path: &str, module: &ModuleDoc, sca
         })
         .collect();
 
+    // Trait realizations (`impl Trait for Type`) of @c4 code types
+    node.trait_impls = module.trait_impls.clone();
+
     // Overlay file table entries onto existing FileNodes
     for file_entry in &module.files {
         let file_node = node

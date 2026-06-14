@@ -184,6 +184,25 @@ pub fn generate_code(output_dir: &Path, ir: &ArchitectureIR) {
         boundary_defs.push_str("}\n\n");
     }
 
+    // Realization arrows from `impl Trait for Type`. The implementing type is
+    // always a `@c4 code` element (the walker filtered on that); draw the arrow
+    // only when the trait is one too, so realizations stay within the curated
+    // set rather than auto-creating bare nodes for std/derive traits.
+    for owner in &owners {
+        for ti in &owner.trait_impls {
+            let (Some(type_id), Some(trait_id)) = (
+                by_name.get(ti.type_name.as_str()),
+                by_name.get(ti.trait_name.as_str()),
+            ) else {
+                continue;
+            };
+            rel_defs.push_str(&format!(
+                "Rel({}, {}, \"implements\", \"trait\")\n",
+                type_id, trait_id
+            ));
+        }
+    }
+
     let content = format!(
         r#"@startuml c4-code
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
@@ -215,4 +234,55 @@ fn to_title_case(s: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use archidoc_types::ir::{ArchitectureIR, CodeElement, DirNode, TraitImpl};
+    use archidoc_types::C4Level;
+
+    fn code_owner(name: &str, elements: &[(&str, &str)], impls: &[(&str, &str)]) -> DirNode {
+        let mut d = DirNode::empty(name, name);
+        d.c4_level = Some(C4Level::Component);
+        d.code_elements = elements
+            .iter()
+            .map(|(n, k)| CodeElement {
+                name: n.to_string(),
+                kind: k.to_string(),
+                description: None,
+                relationships: vec![],
+            })
+            .collect();
+        d.trait_impls = impls
+            .iter()
+            .map(|(t, tr)| TraitImpl {
+                type_name: t.to_string(),
+                trait_name: tr.to_string(),
+            })
+            .collect();
+        d
+    }
+
+    #[test]
+    fn code_diagram_draws_realization_only_when_both_are_code() {
+        let core = code_owner("core", &[("FileFormatAdapter", "trait")], &[]);
+        // Md implements one @c4 code trait and one un-annotated trait (Clone).
+        let md = code_owner(
+            "markdown",
+            &[("Md", "struct")],
+            &[("Md", "FileFormatAdapter"), ("Md", "Clone")],
+        );
+        let mut ir = ArchitectureIR::new("/scan".to_string());
+        ir.root.dirs = vec![core, md];
+
+        let dir = std::env::temp_dir().join("archidoc_trait_impl_test");
+        std::fs::create_dir_all(&dir).unwrap();
+        generate_code(&dir, &ir);
+        let out = std::fs::read_to_string(dir.join("c4-code.puml")).unwrap();
+
+        assert!(out.contains("Rel(markdown__Md, core__FileFormatAdapter, \"implements\", \"trait\")"));
+        // Clone is not a @c4 code element → no realization arrow, no bare node.
+        assert!(!out.contains("Clone"));
+    }
 }
