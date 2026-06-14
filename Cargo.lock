@@ -88,6 +88,7 @@ version = "0.5.0"
 dependencies = [
  "archidoc-types",
  "quote",
+ "serde_json",
  "syn",
  "tempfile",
  "walkdir",
