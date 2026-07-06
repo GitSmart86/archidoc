@@ -11,7 +11,7 @@ archidoc has four subcommands: `compile`, `render`, `annotate`, `scaffold`, plus
 Extracts `@c4` annotations and directory structure into a JSON IR file.
 
 ```bash
-archidoc compile ir .                          # scan → _context/current.json
+archidoc compile ir .                          # scan → _context/archidoc/current.json
 archidoc compile ir . --design                 # → architecture.json (all health=planned)
 ```
 
@@ -20,13 +20,13 @@ archidoc compile ir . --design                 # → architecture.json (all heal
 Renders documentation from a JSON IR file or directory (auto-compiled).
 
 ```bash
-archidoc render md _context/current.json       # human-readable architecture doc
+archidoc render md _context/archidoc/current.json       # human-readable architecture doc
 archidoc render ai ./src/                      # token-optimized module listing
 archidoc render context .                      # tree + strategy + health for LLMs
 archidoc render tree . --depth 3               # compact directory tree
 archidoc render files .                        # directory tree with files
-archidoc render plantuml _context/current.json # PlantUML C4 diagrams
-archidoc render drawio _context/current.json   # draw.io CSV import
+archidoc render plantuml _context/archidoc/current.json # PlantUML C4 diagrams
+archidoc render drawio _context/archidoc/current.json   # draw.io CSV import
 ```
 
 ### `archidoc annotate <lang> [dir]` — Add @c4 entry points + coverage
@@ -42,7 +42,7 @@ archidoc annotate rs ./src/ --force            # overwrite existing annotations
 
 archidoc annotate --coverage .                 # annotation coverage report
 archidoc annotate --coverage . --depth 1       # coverage limited to top-level
-archidoc annotate --coverage _context/current.json  # coverage from existing IR
+archidoc annotate --coverage _context/archidoc/current.json  # coverage from existing IR
 ```
 
 ### `archidoc scaffold <name> [--target dir] [--var k=v]` — Folder templates
@@ -236,7 +236,7 @@ archidoc annotate --coverage .
 
 # 5. Compile and validate
 archidoc compile ir .
-archidoc render md _context/current.json --validate
+archidoc render md _context/archidoc/current.json --validate
 ```
 
 ## Templates

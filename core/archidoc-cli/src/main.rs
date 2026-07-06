@@ -62,9 +62,9 @@ Render formats (Diagrams):
   drawio         → diagrams/c4.drawio.csv           draw.io CSV import
 
 Quick start:
-  archidoc ir compile .                    scan → _context/current.json
+  archidoc ir compile .                    scan → _context/archidoc/current.json
   archidoc ir render ai-structure .        instant LLM context (one step)
-  archidoc ir render human-strategy _context/current.json
+  archidoc ir render human-strategy _context/archidoc/current.json
 ")]
 #[command(arg_required_else_help = true)]
 struct Cli {
@@ -90,7 +90,7 @@ enum Commands {
     /// Examples:
     ///   archidoc ir compile .
     ///   archidoc ir render ai-structure .
-    ///   archidoc ir validate _context/architecture.json _context/current.json
+    ///   archidoc ir validate _context/archidoc/architecture.json _context/archidoc/current.json
     ///   archidoc ir ls . --depth 2
     ///   archidoc ir describe src/api
     ///   archidoc ir query --empty
@@ -132,7 +132,7 @@ enum Commands {
     ///   archidoc annotate rs ./src/ --dry-run
     ///   archidoc annotate rs ./src/ --force
     ///   archidoc annotate --coverage .
-    ///   archidoc annotate --coverage _context/current.json
+    ///   archidoc annotate --coverage _context/archidoc/current.json
     ///   archidoc annotate --coverage . --depth 2
     Annotate(AnnotateArgs),
 }
@@ -158,13 +158,13 @@ enum IrCommand {
     /// Examples:
     ///   archidoc ir compile .
     ///   archidoc ir compile ./src --design
-    ///   archidoc ir compile . --output-dir _context
+    ///   archidoc ir compile . --output-dir _context/archidoc
     Compile {
         /// Directory to scan (defaults to current directory)
         path: Option<PathBuf>,
 
         /// Directory to write output into
-        #[arg(long, default_value = "_context")]
+        #[arg(long, default_value = "_context/archidoc")]
         output_dir: PathBuf,
 
         /// Emit as architecture (target truth, all health = planned).
@@ -194,10 +194,10 @@ enum IrCommand {
     /// Examples:
     ///   archidoc ir render ai-files ./src/
     ///   archidoc ir render ai-structure .
-    ///   archidoc ir render ai-strategy _context/current.json
-    ///   archidoc ir render human-strategy _context/current.json
-    ///   archidoc ir render human-strategy _context/current.json --validate
-    ///   archidoc ir render plantuml _context/current.json
+    ///   archidoc ir render ai-strategy _context/archidoc/current.json
+    ///   archidoc ir render human-strategy _context/archidoc/current.json
+    ///   archidoc ir render human-strategy _context/archidoc/current.json --validate
+    ///   archidoc ir render plantuml _context/archidoc/current.json
     Render {
         /// Output format
         #[arg(value_enum)]
@@ -207,7 +207,7 @@ enum IrCommand {
         source: PathBuf,
 
         /// Directory to write rendered output into
-        #[arg(long, default_value = "_context")]
+        #[arg(long, default_value = "_context/archidoc")]
         output_dir: PathBuf,
 
         /// Maximum directory depth (ai-files and ai-structure formats)
@@ -241,9 +241,9 @@ enum IrCommand {
     ///   1  errors found, or warnings found with --strict
     ///
     /// Examples:
-    ///   archidoc ir validate _context/architecture.json _context/current.json
-    ///   archidoc ir validate _context/architecture.json _context/current.json --strict
-    ///   archidoc ir validate _context/architecture.json _context/current.json --log
+    ///   archidoc ir validate _context/archidoc/architecture.json _context/archidoc/current.json
+    ///   archidoc ir validate _context/archidoc/architecture.json _context/archidoc/current.json --strict
+    ///   archidoc ir validate _context/archidoc/architecture.json _context/archidoc/current.json --log
     Validate {
         /// Path to the architecture IR (target truth — what SHOULD exist)
         architecture: PathBuf,
@@ -262,12 +262,12 @@ enum IrCommand {
 
     /// List directory children from compiled IR (no rescan)
     ///
-    /// Reads from _context/current.json by default.
+    /// Reads from _context/archidoc/current.json by default.
     ///
     /// Examples:
     ///   archidoc ir ls . --depth 2
     ///   archidoc ir ls src/api
-    ///   archidoc ir ls . --ir-path _context/architecture.json
+    ///   archidoc ir ls . --ir-path _context/archidoc/architecture.json
     Ls {
         /// Directory path to list (use "." for root)
         path: String,
@@ -276,7 +276,7 @@ enum IrCommand {
         #[arg(long, default_value = "1")]
         depth: usize,
 
-        /// Path to IR JSON file (default: _context/current.json)
+        /// Path to IR JSON file (default: _context/archidoc/current.json)
         #[arg(long)]
         ir_path: Option<PathBuf>,
     },
@@ -285,12 +285,12 @@ enum IrCommand {
     ///
     /// Examples:
     ///   archidoc ir describe src/api
-    ///   archidoc ir describe . --ir-path _context/architecture.json
+    ///   archidoc ir describe . --ir-path _context/archidoc/architecture.json
     Describe {
         /// Directory path to describe
         path: String,
 
-        /// Path to IR JSON file (default: _context/current.json)
+        /// Path to IR JSON file (default: _context/archidoc/current.json)
         #[arg(long)]
         ir_path: Option<PathBuf>,
     },
@@ -320,7 +320,7 @@ enum IrCommand {
         #[arg(long)]
         annotated: bool,
 
-        /// Path to IR JSON file (default: _context/current.json)
+        /// Path to IR JSON file (default: _context/archidoc/current.json)
         #[arg(long)]
         ir_path: Option<PathBuf>,
     },
@@ -352,7 +352,7 @@ enum ScaffoldCommand {
         path: PathBuf,
 
         /// Directory to write output into
-        #[arg(long, default_value = "_context")]
+        #[arg(long, default_value = "_context/archidoc")]
         output_dir: PathBuf,
     },
 
@@ -607,6 +607,9 @@ fn run_ir_compile(path: Option<PathBuf>, output_dir: PathBuf, design: bool) {
 struct RenderConfig<'a> {
     ir: &'a archidoc_types::ir::ArchitectureIR,
     output_dir: &'a Path,
+    /// The original scan root directory (needed for walk-up discovery of
+    /// `.archidoc/narrative-context.md` by the ai-strategy renderer).
+    scan_root: Option<&'a Path>,
     depth: Option<usize>,
     validate: bool,
     validate_strict: bool,
@@ -641,6 +644,14 @@ fn run_ir_render(
     let output_dir = resolve_path(&base, &output_dir);
     let ir = resolve_source(&source);
 
+    // If source is a directory, use it as the scan root for walk-up
+    // discovery. If source is a JSON file, use its parent directory.
+    let scan_root_buf: PathBuf = if source.is_dir() {
+        source.clone()
+    } else {
+        source.parent().unwrap_or(&base).to_path_buf()
+    };
+
     fs::create_dir_all(&output_dir).unwrap_or_else(|e| {
         eprintln!("error: failed to create output directory: {}", e);
         std::process::exit(1);
@@ -649,6 +660,7 @@ fn run_ir_render(
     let config = RenderConfig {
         ir: &ir,
         output_dir: &output_dir,
+        scan_root: Some(&scan_root_buf),
         depth,
         validate,
         validate_strict,
@@ -697,7 +709,45 @@ fn render_ai_structure(cfg: &RenderConfig) {
 }
 
 fn render_ai_strategy(cfg: &RenderConfig) {
-    let content = archidoc_engine::ai_context::generate(cfg.ir);
+    // Discover and parse .archidoc/narrative-context.md via walk-up search
+    let narrative_ctx = cfg.scan_root.and_then(|root| {
+        archidoc_engine::narrative_context::discover(root).and_then(|path| {
+            match fs::read_to_string(&path) {
+                Ok(content) => {
+                    match archidoc_engine::narrative_context::parse(&content) {
+                        Ok(ctx) => {
+                            eprintln!(
+                                "info: using narrative context from {}",
+                                path.display()
+                            );
+                            Some(ctx)
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "warning: failed to parse {}: {} (falling back to IR-only)",
+                                path.display(),
+                                e
+                            );
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "warning: failed to read {}: {} (falling back to IR-only)",
+                        path.display(),
+                        e
+                    );
+                    None
+                }
+            }
+        })
+    });
+
+    let content = archidoc_engine::ai_context::generate_with_narrative(
+        cfg.ir,
+        narrative_ctx.as_ref(),
+    );
     write_file(&cfg.output_dir.join("ai-strategy.md"), &content);
 }
 
@@ -1285,10 +1335,10 @@ fn load_ir(path: &Path) -> archidoc_types::ir::ArchitectureIR {
     })
 }
 
-/// Load IR from --ir-path or default _context/current.json.
+/// Load IR from --ir-path or default _context/archidoc/current.json.
 fn load_ir_default(ir_path: Option<PathBuf>) -> archidoc_types::ir::ArchitectureIR {
     let base = cwd();
-    let ir_path = ir_path.unwrap_or_else(|| base.join("_context/current.json"));
+    let ir_path = ir_path.unwrap_or_else(|| base.join("_context/archidoc/current.json"));
     let ir_path = resolve_path(&base, &ir_path);
 
     if !ir_path.exists() {

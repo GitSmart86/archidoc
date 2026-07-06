@@ -49,10 +49,10 @@ Emits ArchitectureIR v2.0 JSON to stdout.
 Usage: archidoc-ts <root-dir>
 
 Examples:
-  archidoc-ts ./src > _context/current.json
-  archidoc render md _context/current.json
-  archidoc render context _context/current.json
-  archidoc validate _context/architecture.json _context/current.json
+  archidoc-ts ./src > _context/archidoc/current.json
+  archidoc render md _context/archidoc/current.json
+  archidoc render context _context/archidoc/current.json
+  archidoc validate _context/archidoc/architecture.json _context/archidoc/current.json
 
 Output: ArchitectureIR v2.0 — a nested directory tree where each node
 carries structure (dirs + files), strategy (C4 level, pattern, description),

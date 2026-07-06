@@ -1,0 +1,635 @@
+{
+  "version": "1.0",
+  "modules": [
+    {
+      "module_path": "core.archidoc-engine.src.folder_scaffold",
+      "content": "Scaffold folder templates — copies named template trees with `{{variable}}` substitution.\n\nTemplates live in `.archidoc/scaffold-templates/<name>/`.\nWalk-up discovery finds the nearest matching template from the current directory upward.\nBuilt-in templates (custom-scaffolds, custom-inits, custom-trees) ship with the binary\nand work even before `.archidoc/` exists.",
+      "source_file": "C:\\Code-Projects\\Tool-Projects\\Archidoc\\.\\core\\archidoc-engine\\src\\folder_scaffold\\mod.rs",
+      "c4_level": "unknown",
+      "pattern": "--",
+      "pattern_status": "planned",
+      "description": "Scaffold folder templates — copies named template trees with `{{variable}}` substitution.",
+      "parent_container": "core",
+      "relationships": [],
+      "files": []
+    },
+    {
+      "module_path": "core.archidoc-engine.src.init_cmd",
+      "content": "Init command — generates files from environment context.\n\nEach handler reads the target directory, applies a template, and produces output.\nHandlers are registered by name and dispatched via `archidoc init <handler> [target-dir]`.",
+      "source_file": "C:\\Code-Projects\\Tool-Projects\\Archidoc\\.\\core\\archidoc-engine\\src\\init_cmd\\mod.rs",
+      "c4_level": "unknown",
+      "pattern": "--",
+      "pattern_status": "planned",
+      "description": "Init command — generates files from environment context.",
+      "parent_container": "core",
+      "relationships": [],
+      "files": []
+    },
+    {
+      "module_path": "examples.rust-example.src.api",
+      "content": "@c4 container\n# Api\n\nREST API gateway — handles authentication and request routing.\n\n@c4 uses database \"Persists user data\" \"sqlx\"\n@c4 uses events \"Publishes domain events\" \"channel\"\n\n| File | Pattern | Purpose | Health |\n|------|---------|---------|--------|\n| `routes.rs` | -- | HTTP route handlers | active |\n| `middleware.rs` | Strategy | Auth and rate limiting | stable |\n| `errors.rs` | -- | Error types and conversions | stable |",
+      "source_file": "C:\\Code-Projects\\Tool-Projects\\Archidoc\\.\\examples\\rust-example\\src\\api\\mod.rs",
+      "c4_level": "container",
+      "pattern": "--",
+      "pattern_status": "planned",
+      "description": "REST API gateway — handles authentication and request routing.",
+      "parent_container": "examples",
+      "relationships": [
+        {
+          "target": "database",
+          "label": "Persists user data",
+          "protocol": "sqlx"
+        },
+        {
+          "target": "events",
+          "label": "Publishes domain events",
+          "protocol": "channel"
+        }
+      ],
+      "files": [
+        {
+          "name": "routes.rs",
+          "pattern": "--",
+          "pattern_status": "planned",
+          "purpose": "HTTP route handlers",
+          "health": "active"
+        },
+        {
+          "name": "middleware.rs",
+          "pattern": "Strategy",
+          "pattern_status": "planned",
+          "purpose": "Auth and rate limiting",
+          "health": "stable"
+        },
+        {
+          "name": "errors.rs",
+          "pattern": "--",
+          "pattern_status": "planned",
+          "purpose": "Error types and conversions",
+          "health": "stable"
+        }
+      ]
+    },
+    {
+      "module_path": "examples.rust-example.src.database",
+      "content": "@c4 container\n# Database\n\nPersistence layer — manages database connections and queries.\n\n| File | Pattern | Purpose | Health |\n|------|---------|---------|--------|\n| `pool.rs` | Singleton | Connection pool management | stable |\n| `queries.rs` | Repository | SQL query implementations | active |",
+      "source_file": "C:\\Code-Projects\\Tool-Projects\\Archidoc\\.\\examples\\rust-example\\src\\database\\mod.rs",
+      "c4_level": "container",
+      "pattern": "--",
+      "pattern_status": "planned",
+      "description": "Persistence layer — manages database connections and queries.",
+      "parent_container": "examples",
+      "relationships": [],
+      "files": [
+        {
+          "name": "pool.rs",
+          "pattern": "Singleton",
+          "pattern_status": "planned",
+          "purpose": "Connection pool management",
+          "health": "stable"
+        },
+        {
+          "name": "queries.rs",
+          "pattern": "Repository",
+          "pattern_status": "planned",
+          "purpose": "SQL query implementations",
+          "health": "active"
+        }
+      ]
+    },
+    {
+      "module_path": "examples.rust-example.src.events",
+      "content": "@c4 container\n# Events\n\nDomain event bus — decouples producers from consumers.\n\n| File | Pattern | Purpose | Health |\n|------|---------|---------|--------|\n| `bus.rs` | Observer | Event dispatch and subscription | active |\n| `types.rs` | -- | Event type definitions | stable |",
+      "source_file": "C:\\Code-Projects\\Tool-Projects\\Archidoc\\.\\examples\\rust-example\\src\\events\\mod.rs",
+      "c4_level": "container",
+      "pattern": "--",
+      "pattern_status": "planned",
+      "description": "Domain event bus — decouples producers from consumers.",
+      "parent_container": "examples",
+      "relationships": [],
+      "files": [
+        {
+          "name": "bus.rs",
+          "pattern": "Observer",
+          "pattern_status": "planned",
+          "purpose": "Event dispatch and subscription",
+          "health": "active"
+        },
+        {
+          "name": "types.rs",
+          "pattern": "--",
+          "pattern_status": "planned",
+          "purpose": "Event type definitions",
+          "health": "stable"
+        }
+      ]
+    }
+  ],
+  "tree": {
+    "root": {
+      "name": ".",
+      "path": ".",
+      "children": [
+        {
+          "name": ".github",
+          "path": ".github",
+          "children": [
+            {
+              "name": "workflows",
+              "path": ".github/workflows",
+              "children": [],
+              "files": [
+                "ci.yml",
+                "publish-npm-archidoc.yml",
+                "publish.yml"
+              ]
+            }
+          ],
+          "files": []
+        },
+        {
+          "name": "adapters",
+          "path": "adapters",
+          "children": [
+            {
+              "name": "archidoc",
+              "path": "adapters/archidoc",
+              "children": [
+                {
+                  "name": "bin",
+                  "path": "adapters/archidoc/bin",
+                  "children": [],
+                  "files": [
+                    "archidoc.js"
+                  ]
+                },
+                {
+                  "name": "scripts",
+                  "path": "adapters/archidoc/scripts",
+                  "children": [],
+                  "files": [
+                    "install.js"
+                  ]
+                },
+                {
+                  "name": "tests",
+                  "path": "adapters/archidoc/tests",
+                  "children": [],
+                  "files": [
+                    "install.test.js"
+                  ]
+                }
+              ],
+              "files": [
+                "README.md",
+                "package.json"
+              ]
+            },
+            {
+              "name": "archidoc-md",
+              "path": "adapters/archidoc-md",
+              "children": [
+                {
+                  "name": "src",
+                  "path": "adapters/archidoc-md/src",
+                  "children": [],
+                  "files": [
+                    "index.ts",
+                    "parser.ts",
+                    "path-resolver.ts",
+                    "types.ts",
+                    "walker.ts"
+                  ]
+                }
+              ],
+              "files": [
+                "package.json",
+                "tsconfig.json"
+              ]
+            },
+            {
+              "name": "archidoc-rust",
+              "path": "adapters/archidoc-rust",
+              "children": [
+                {
+                  "name": "src",
+                  "path": "adapters/archidoc-rust/src",
+                  "children": [],
+                  "files": [
+                    "cargo_modules.rs",
+                    "fitness.rs",
+                    "lib.rs",
+                    "parser.rs",
+                    "path_resolver.rs",
+                    "pattern_heuristic.rs",
+                    "promote.rs",
+                    "walker.rs"
+                  ]
+                },
+                {
+                  "name": "tests",
+                  "path": "adapters/archidoc-rust/tests",
+                  "children": [],
+                  "files": [
+                    "flat_module_test.rs"
+                  ]
+                }
+              ],
+              "files": [
+                "Cargo.toml"
+              ]
+            },
+            {
+              "name": "archidoc-ts",
+              "path": "adapters/archidoc-ts",
+              "children": [
+                {
+                  "name": "src",
+                  "path": "adapters/archidoc-ts/src",
+                  "children": [],
+                  "files": [
+                    "index.ts",
+                    "parser.ts",
+                    "path-resolver.ts",
+                    "types.ts",
+                    "walker.ts"
+                  ]
+                },
+                {
+                  "name": "tests",
+                  "path": "adapters/archidoc-ts/tests",
+                  "children": [
+                    {
+                      "name": "fixtures",
+                      "path": "adapters/archidoc-ts/tests/fixtures",
+                      "children": [
+                        {
+                          "name": "dashboard",
+                          "path": "adapters/archidoc-ts/tests/fixtures/dashboard",
+                          "children": [
+                            {
+                              "name": "charts",
+                              "path": "adapters/archidoc-ts/tests/fixtures/dashboard/charts",
+                              "children": [],
+                              "files": [
+                                "index.ts"
+                              ]
+                            }
+                          ],
+                          "files": [
+                            "index.ts"
+                          ]
+                        }
+                      ],
+                      "files": []
+                    }
+                  ],
+                  "files": [
+                    "import-extraction.test.ts",
+                    "integration.test.ts",
+                    "parser.test.ts",
+                    "walker.test.ts"
+                  ]
+                }
+              ],
+              "files": [
+                "README.md",
+                "package.json",
+                "tsconfig.json"
+              ]
+            }
+          ],
+          "files": []
+        },
+        {
+          "name": "core",
+          "path": "core",
+          "children": [
+            {
+              "name": "archidoc-cli",
+              "path": "core/archidoc-cli",
+              "children": [
+                {
+                  "name": "src",
+                  "path": "core/archidoc-cli/src",
+                  "children": [],
+                  "files": [
+                    "main.rs"
+                  ]
+                },
+                {
+                  "name": "tests",
+                  "path": "core/archidoc-cli/tests",
+                  "children": [],
+                  "files": [
+                    "cli_integration_test.rs",
+                    "polyglot_detection_test.rs"
+                  ]
+                }
+              ],
+              "files": [
+                "Cargo.toml"
+              ]
+            },
+            {
+              "name": "archidoc-engine",
+              "path": "core/archidoc-engine",
+              "children": [
+                {
+                  "name": "src",
+                  "path": "core/archidoc-engine/src",
+                  "children": [
+                    {
+                      "name": "folder_scaffold",
+                      "path": "core/archidoc-engine/src/folder_scaffold",
+                      "children": [],
+                      "files": [
+                        "builtins.rs",
+                        "discover.rs",
+                        "execute.rs",
+                        "mod.rs",
+                        "plan.rs",
+                        "types.rs",
+                        "variables.rs"
+                      ]
+                    },
+                    {
+                      "name": "init_cmd",
+                      "path": "core/archidoc-engine/src/init_cmd",
+                      "children": [],
+                      "files": [
+                        "annotation_handler.rs",
+                        "handler.rs",
+                        "index_handler.rs",
+                        "mod.rs",
+                        "root_annotation_handler.rs",
+                        "tree_handler.rs"
+                      ]
+                    }
+                  ],
+                  "files": [
+                    "ai_context.rs",
+                    "annotate.rs",
+                    "architecture.rs",
+                    "check.rs",
+                    "custom.rs",
+                    "diagnostics.rs",
+                    "drawio.rs",
+                    "health.rs",
+                    "init.rs",
+                    "ir.rs",
+                    "lib.rs",
+                    "merge.rs",
+                    "mermaid.rs",
+                    "plantuml.rs",
+                    "scaffold.rs",
+                    "suggest.rs",
+                    "tree.rs",
+                    "validate.rs"
+                  ]
+                }
+              ],
+              "files": [
+                "Cargo.toml"
+              ]
+            },
+            {
+              "name": "archidoc-types",
+              "path": "core/archidoc-types",
+              "children": [
+                {
+                  "name": "src",
+                  "path": "core/archidoc-types/src",
+                  "children": [],
+                  "files": [
+                    "annotation.rs",
+                    "ir.rs",
+                    "lib.rs",
+                    "module_doc.rs",
+                    "report.rs"
+                  ]
+                }
+              ],
+              "files": [
+                "Cargo.toml"
+              ]
+            },
+            {
+              "name": "spec",
+              "path": "core/spec",
+              "children": [],
+              "files": [
+                "archidoc-ir-schema.json"
+              ]
+            },
+            {
+              "name": "tests",
+              "path": "core/tests",
+              "children": [
+                {
+                  "name": "src",
+                  "path": "core/tests/src",
+                  "children": [
+                    {
+                      "name": "drivers",
+                      "path": "core/tests/src/drivers",
+                      "children": [
+                        {
+                          "name": "in_memory",
+                          "path": "core/tests/src/drivers/in_memory",
+                          "children": [],
+                          "files": [
+                            "architecture.rs",
+                            "mod.rs"
+                          ]
+                        },
+                        {
+                          "name": "protocol_driver",
+                          "path": "core/tests/src/drivers/protocol_driver",
+                          "children": [],
+                          "files": [
+                            "architecture.rs",
+                            "mod.rs"
+                          ]
+                        }
+                      ],
+                      "files": [
+                        "mod.rs"
+                      ]
+                    },
+                    {
+                      "name": "dsl",
+                      "path": "core/tests/src/dsl",
+                      "children": [],
+                      "files": [
+                        "architecture.rs",
+                        "mod.rs"
+                      ]
+                    },
+                    {
+                      "name": "fakes",
+                      "path": "core/tests/src/fakes",
+                      "children": [],
+                      "files": [
+                        "fake_source_tree.rs",
+                        "mod.rs"
+                      ]
+                    }
+                  ],
+                  "files": [
+                    "lib.rs",
+                    "params.rs"
+                  ]
+                },
+                {
+                  "name": "tests",
+                  "path": "core/tests/tests",
+                  "children": [],
+                  "files": [
+                    "annotation_scaffolding_test.rs",
+                    "architecture_compilation_test.rs",
+                    "component_relationships_test.rs",
+                    "documentation_drift_test.rs",
+                    "expanded_pattern_validation_test.rs",
+                    "health_reporting_test.rs",
+                    "ir_file_consumption_test.rs",
+                    "ir_merge_test.rs",
+                    "ir_negative_validation_test.rs",
+                    "ir_roundtrip_stability_test.rs",
+                    "pattern_validation_test.rs",
+                    "portable_ir_test.rs",
+                    "project_health_test.rs",
+                    "validation_test.rs"
+                  ]
+                }
+              ],
+              "files": [
+                "Cargo.toml"
+              ]
+            }
+          ],
+          "files": []
+        },
+        {
+          "name": "docs",
+          "path": "docs",
+          "children": [],
+          "files": [
+            "annotating-your-project.md",
+            "annotation-spec.md",
+            "annotation-syntax-rfc.md",
+            "archidoc-for-llms.md",
+            "how-to-write-a-language-adapter.md"
+          ]
+        },
+        {
+          "name": "examples",
+          "path": "examples",
+          "children": [
+            {
+              "name": "rust-example",
+              "path": "examples/rust-example",
+              "children": [
+                {
+                  "name": "src",
+                  "path": "examples/rust-example/src",
+                  "children": [
+                    {
+                      "name": "api",
+                      "path": "examples/rust-example/src/api",
+                      "children": [],
+                      "files": [
+                        "errors.rs",
+                        "middleware.rs",
+                        "mod.rs",
+                        "routes.rs"
+                      ]
+                    },
+                    {
+                      "name": "database",
+                      "path": "examples/rust-example/src/database",
+                      "children": [],
+                      "files": [
+                        "mod.rs",
+                        "pool.rs",
+                        "queries.rs"
+                      ]
+                    },
+                    {
+                      "name": "events",
+                      "path": "examples/rust-example/src/events",
+                      "children": [],
+                      "files": [
+                        "bus.rs",
+                        "mod.rs",
+                        "types.rs"
+                      ]
+                    }
+                  ],
+                  "files": []
+                }
+              ],
+              "files": [
+                "README.md"
+              ]
+            },
+            {
+              "name": "ts-example",
+              "path": "examples/ts-example",
+              "children": [
+                {
+                  "name": "src",
+                  "path": "examples/ts-example/src",
+                  "children": [
+                    {
+                      "name": "dashboard",
+                      "path": "examples/ts-example/src/dashboard",
+                      "children": [],
+                      "files": [
+                        "charts.ts",
+                        "index.ts",
+                        "state.ts"
+                      ]
+                    },
+                    {
+                      "name": "websocket",
+                      "path": "examples/ts-example/src/websocket",
+                      "children": [],
+                      "files": [
+                        "connection.ts",
+                        "index.ts",
+                        "protocol.ts"
+                      ]
+                    }
+                  ],
+                  "files": []
+                }
+              ],
+              "files": [
+                "README.md"
+              ]
+            }
+          ],
+          "files": []
+        },
+        {
+          "name": "hooks",
+          "path": "hooks",
+          "children": [],
+          "files": [
+            "README.md"
+          ]
+        }
+      ],
+      "files": [
+        "ARCHITECTURE.md",
+        "CHANGELOG.md",
+        "CLAUDE.md",
+        "CONTRIBUTING.md",
+        "Cargo.toml",
+        "README.md"
+      ]
+    },
+    "scan_root": "C:\\Code-Projects\\Tool-Projects\\Archidoc\\."
+  }
+}

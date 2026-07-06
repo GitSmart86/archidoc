@@ -19,9 +19,9 @@ cargo install --path core/archidoc-cli
 ## Quick Start
 
 ```bash
-archidoc compile ir .                  # scan → _context/current.json
+archidoc compile ir .                  # scan → _context/archidoc/current.json
 archidoc render ai-structure .         # instant LLM context (one step)
-archidoc render human-strategy _context/current.json
+archidoc render human-strategy _context/archidoc/current.json
 ```
 
 ## Commands
@@ -29,8 +29,8 @@ archidoc render human-strategy _context/current.json
 ### compile — Extract JSON from source (Phase 1)
 
 ```bash
-archidoc compile ir .                        # scan → _context/current.json
-archidoc compile ir . --design               # → _context/architecture.json (all health=planned)
+archidoc compile ir .                        # scan → _context/archidoc/current.json
+archidoc compile ir . --design               # → _context/archidoc/architecture.json (all health=planned)
 archidoc compile scaffold ./templates/firm/  # folder template → ScaffoldIR JSON
 ```
 
@@ -45,10 +45,10 @@ Accepts a `.json` IR file or a directory (auto-compiled on the fly).
 ```bash
 archidoc render ai-files ./src/                     # every file per directory
 archidoc render ai-structure .                      # compressed tree + strategy + health
-archidoc render ai-strategy _context/current.json   # module narrative + relationships
-archidoc render human-strategy _context/current.json  # ARCHITECTURE.md
-archidoc render plantuml _context/current.json      # C4 diagrams
-archidoc render drawio _context/current.json        # draw.io CSV
+archidoc render ai-strategy _context/archidoc/current.json   # module narrative + relationships
+archidoc render human-strategy _context/archidoc/current.json  # ARCHITECTURE.md
+archidoc render plantuml _context/archidoc/current.json      # C4 diagrams
+archidoc render drawio _context/archidoc/current.json        # draw.io CSV
 ```
 
 | Format | Output file | Purpose |
@@ -64,9 +64,9 @@ archidoc render drawio _context/current.json        # draw.io CSV
 ### validate — Check architecture conformance
 
 ```bash
-archidoc validate _context/architecture.json _context/current.json
-archidoc validate _context/architecture.json _context/current.json --strict
-archidoc validate _context/architecture.json _context/current.json --log
+archidoc validate _context/archidoc/architecture.json _context/archidoc/current.json
+archidoc validate _context/archidoc/architecture.json _context/archidoc/current.json --strict
+archidoc validate _context/archidoc/architecture.json _context/archidoc/current.json --log
 ```
 
 Findings:
@@ -158,8 +158,8 @@ A nested directory tree where each node carries structure, strategy, and health:
 
 ```yaml
 - run: archidoc compile ir .
-- run: archidoc validate _context/architecture.json _context/current.json --strict
-- run: archidoc render human-strategy _context/current.json --validate
+- run: archidoc validate _context/archidoc/architecture.json _context/archidoc/current.json --strict
+- run: archidoc render human-strategy _context/archidoc/current.json --validate
 ```
 
 ## Tests

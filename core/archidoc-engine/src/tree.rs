@@ -3,6 +3,11 @@ use std::fs;
 use std::path::Path;
 
 /// Built-in directories to skip. Extended (not replaced) by config.tree.json exclude_dirs.
+///
+/// Entries without `/` match against the directory name only (e.g. `node_modules`).
+/// Entries with `/` match against the relative path from the scan root
+/// (e.g. `_context/archidoc` excludes the `archidoc` child of `_context`
+/// but not an unrelated `archidoc` directory elsewhere).
 const DEFAULT_SKIP_DIRS: &[&str] = &[
     "node_modules",
     ".git",
@@ -12,7 +17,7 @@ const DEFAULT_SKIP_DIRS: &[&str] = &[
     ".vite",
     ".claude",
     "_archive",
-    "_context",
+    "_context/archidoc",
 ];
 
 /// File extensions to include. Replaced by config.tree.json include_extensions if non-empty.
@@ -252,7 +257,7 @@ pub fn build_dir_tree(
         let file_names = collect_files(dir, config);
         let files: Vec<FileNode> = file_names.into_iter().map(|n| FileNode::bare(&n)).collect();
 
-        let mut subdirs = read_subdirs(dir, config);
+        let mut subdirs = read_subdirs(dir, Some(root), config);
         subdirs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
         let dirs: Vec<DirNode> = subdirs
@@ -423,7 +428,7 @@ fn brace_walk(
     max_depth: Option<usize>,
     config: &TreeConfig,
 ) {
-    let mut subdirs = read_subdirs(dir, config);
+    let mut subdirs = read_subdirs(dir, Some(root), config);
     if subdirs.is_empty() {
         return; // leaf — appears only in parent's brace list
     }
@@ -462,12 +467,12 @@ fn walk_files(
         }
     }
 
-    let mut subdirs = read_subdirs(dir, config);
+    let mut subdirs = read_subdirs(dir, Some(root), config);
     subdirs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
     // Sibling-collapse: if all subdirs are leaves with identical non-empty file sets,
     // emit one compressed line instead of N individual lines.
-    if let Some(collapse) = try_sibling_collapse(&subdirs, config) {
+    if let Some(collapse) = try_sibling_collapse(&subdirs, root, config) {
         let prefix = dir_rel(root, dir);
         out.push_str(&format!(
             "{}/{{{}}}/  [each: {}]\n",
@@ -512,7 +517,7 @@ struct SiblingCollapse {
 /// 1. At least 3 siblings.
 /// 2. Every sibling is a leaf dir (no nested subdirs of its own).
 /// 3. Every sibling has an identical, non-empty file set.
-fn try_sibling_collapse(subdirs: &[std::path::PathBuf], config: &TreeConfig) -> Option<SiblingCollapse> {
+fn try_sibling_collapse(subdirs: &[std::path::PathBuf], root: &Path, config: &TreeConfig) -> Option<SiblingCollapse> {
     if subdirs.len() < 3 {
         return None;
     }
@@ -520,7 +525,7 @@ fn try_sibling_collapse(subdirs: &[std::path::PathBuf], config: &TreeConfig) -> 
     let mut signatures: Vec<Vec<String>> = Vec::with_capacity(subdirs.len());
     for subdir in subdirs {
         // Must be a leaf — no nested subdirs
-        if !read_subdirs(subdir, config).is_empty() {
+        if !read_subdirs(subdir, Some(root), config).is_empty() {
             return None;
         }
         let files = collect_files(subdir, config);
@@ -602,7 +607,7 @@ fn format_file_suffix(files: &[String], config: &TreeConfig) -> String {
     format!(" [{} files: {}]", files.len(), breakdown.join(" "))
 }
 
-fn read_subdirs(dir: &Path, config: &TreeConfig) -> Vec<std::path::PathBuf> {
+fn read_subdirs(dir: &Path, root: Option<&Path>, config: &TreeConfig) -> Vec<std::path::PathBuf> {
     let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
 
     entries
@@ -614,12 +619,39 @@ fn read_subdirs(dir: &Path, config: &TreeConfig) -> Vec<std::path::PathBuf> {
             }
             let name = e.file_name();
             let name_str = name.to_string_lossy();
-            if config.exclude_dirs.iter().any(|p| matches_pattern(p, name_str.as_ref())) {
+            if is_excluded_dir(&name_str, &path, root, config) {
                 return None;
             }
             Some(path)
         })
         .collect()
+}
+
+/// Check whether a directory should be excluded.
+///
+/// - Name-only patterns (no `/`): matched against the directory name.
+/// - Path patterns (contain `/`): matched against the relative path from the
+///   scan root, using forward slashes. Falls back to name-only if root is None.
+fn is_excluded_dir(name: &str, full_path: &Path, root: Option<&Path>, config: &TreeConfig) -> bool {
+    for pattern in &config.exclude_dirs {
+        if pattern.contains('/') {
+            // Path-based pattern: needs root to compute relative path
+            if let Some(root) = root {
+                if let Ok(rel) = full_path.strip_prefix(root) {
+                    let rel_str = rel.to_string_lossy().replace('\\', "/");
+                    if matches_pattern(pattern, &rel_str) {
+                        return true;
+                    }
+                }
+            }
+        } else {
+            // Name-only pattern: match against just the directory name
+            if matches_pattern(pattern, name) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

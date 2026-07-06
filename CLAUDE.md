@@ -32,7 +32,7 @@ archidoc annotate rs ./src/ --force           # overwrite existing annotations
 
 archidoc annotate --coverage .                # annotation coverage report
 archidoc annotate --coverage . --depth 1      # coverage limited to top-level
-archidoc annotate --coverage _context/current.json  # coverage from existing IR
+archidoc annotate --coverage _context/archidoc/current.json  # coverage from existing IR
 ```
 
 ### `archidoc scaffold <name> [--target dir] [--var k=v]` — Folder templates

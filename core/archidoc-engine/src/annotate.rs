@@ -11,8 +11,29 @@ const SKIP_DIRS: &[&str] = &[
     ".vite",
     ".claude",
     "_archive",
-    "_context",
 ];
+
+/// Check whether a directory should be skipped during annotation walks.
+///
+/// Skips directories whose name is in SKIP_DIRS, names starting with '.',
+/// and the archidoc output directory (`_context/archidoc`).
+fn should_skip_dir(path: &Path, name: &str) -> bool {
+    if SKIP_DIRS.contains(&name) || name.starts_with('.') {
+        return true;
+    }
+    // Skip _context/archidoc (archidoc output dir) by checking path components.
+    // If the directory is named "archidoc" and its parent is "_context", skip it.
+    if name == "archidoc" {
+        if let Some(parent) = path.parent() {
+            if let Some(parent_name) = parent.file_name().and_then(|n| n.to_str()) {
+                if parent_name == "_context" {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -133,7 +154,7 @@ fn walk_and_annotate(
                 return None;
             }
             let name = e.file_name().to_string_lossy().to_string();
-            if SKIP_DIRS.contains(&name.as_str()) || name.starts_with('.') {
+            if should_skip_dir(&path, &name) {
                 return None;
             }
             Some(path)
@@ -165,7 +186,7 @@ fn collect_subdirs(dir: &Path, all: &mut Vec<PathBuf>, depth: usize, max_depth: 
                 return None;
             }
             let name = e.file_name().to_string_lossy().to_string();
-            if SKIP_DIRS.contains(&name.as_str()) || name.starts_with('.') {
+            if should_skip_dir(&path, &name) {
                 return None;
             }
             Some(path)
@@ -459,7 +480,7 @@ fn scan_subdirs(dir: &Path) -> Vec<String> {
                 return None;
             }
             let name = e.file_name().to_string_lossy().to_string();
-            if SKIP_DIRS.contains(&name.as_str()) || name.starts_with('.') {
+            if should_skip_dir(&path, &name) {
                 return None;
             }
             Some(name)

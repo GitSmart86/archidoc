@@ -12,15 +12,15 @@ npm install -g archidoc-ts
 
 ```bash
 # Scan a TypeScript project → ArchitectureIR v2.0 JSON
-archidoc-ts ./src > _context/current.json
+archidoc-ts ./src > _context/archidoc/current.json
 
 # Render documentation from the IR (requires archidoc Rust CLI)
-archidoc render md _context/current.json
-archidoc render context _context/current.json
-archidoc render ai _context/current.json
+archidoc render md _context/archidoc/current.json
+archidoc render context _context/archidoc/current.json
+archidoc render ai _context/archidoc/current.json
 
 # Validate architecture conformance
-archidoc validate _context/architecture.json _context/current.json
+archidoc validate _context/archidoc/architecture.json _context/archidoc/current.json
 ```
 
 ## Output Format

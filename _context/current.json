@@ -1,0 +1,804 @@
+{
+  "version": "2.0",
+  "scan_root": "C:\\Code-Projects\\Tool-Projects\\Archidoc\\.",
+  "root": {
+    "name": ".",
+    "path": ".",
+    "dirs": [
+      {
+        "name": ".github",
+        "path": ".github",
+        "dirs": [
+          {
+            "name": "workflows",
+            "path": ".github/workflows",
+            "files": [
+              {
+                "name": "ci.yml"
+              },
+              {
+                "name": "publish-npm-archidoc.yml"
+              },
+              {
+                "name": "publish.yml"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "adapters",
+        "path": "adapters",
+        "dirs": [
+          {
+            "name": "archidoc",
+            "path": "adapters/archidoc",
+            "dirs": [
+              {
+                "name": "bin",
+                "path": "adapters/archidoc/bin",
+                "files": [
+                  {
+                    "name": "archidoc.js"
+                  }
+                ]
+              },
+              {
+                "name": "scripts",
+                "path": "adapters/archidoc/scripts",
+                "files": [
+                  {
+                    "name": "install.js"
+                  }
+                ]
+              },
+              {
+                "name": "tests",
+                "path": "adapters/archidoc/tests",
+                "files": [
+                  {
+                    "name": "install.test.js"
+                  }
+                ]
+              }
+            ],
+            "files": [
+              {
+                "name": "README.md"
+              },
+              {
+                "name": "package.json"
+              }
+            ]
+          },
+          {
+            "name": "archidoc-md",
+            "path": "adapters/archidoc-md",
+            "dirs": [
+              {
+                "name": "src",
+                "path": "adapters/archidoc-md/src",
+                "files": [
+                  {
+                    "name": "index.ts"
+                  },
+                  {
+                    "name": "parser.ts"
+                  },
+                  {
+                    "name": "path-resolver.ts"
+                  },
+                  {
+                    "name": "types.ts"
+                  },
+                  {
+                    "name": "walker.ts"
+                  }
+                ]
+              }
+            ],
+            "files": [
+              {
+                "name": "package.json"
+              },
+              {
+                "name": "tsconfig.json"
+              }
+            ]
+          },
+          {
+            "name": "archidoc-rust",
+            "path": "adapters/archidoc-rust",
+            "dirs": [
+              {
+                "name": "src",
+                "path": "adapters/archidoc-rust/src",
+                "files": [
+                  {
+                    "name": "cargo_modules.rs"
+                  },
+                  {
+                    "name": "fitness.rs"
+                  },
+                  {
+                    "name": "lib.rs"
+                  },
+                  {
+                    "name": "parser.rs"
+                  },
+                  {
+                    "name": "path_resolver.rs"
+                  },
+                  {
+                    "name": "pattern_heuristic.rs"
+                  },
+                  {
+                    "name": "promote.rs"
+                  },
+                  {
+                    "name": "walker.rs"
+                  }
+                ]
+              },
+              {
+                "name": "tests",
+                "path": "adapters/archidoc-rust/tests",
+                "files": [
+                  {
+                    "name": "flat_module_test.rs"
+                  }
+                ]
+              }
+            ],
+            "files": [
+              {
+                "name": "Cargo.toml"
+              }
+            ]
+          },
+          {
+            "name": "archidoc-ts",
+            "path": "adapters/archidoc-ts",
+            "dirs": [
+              {
+                "name": "src",
+                "path": "adapters/archidoc-ts/src",
+                "files": [
+                  {
+                    "name": "index.ts"
+                  },
+                  {
+                    "name": "parser.ts"
+                  },
+                  {
+                    "name": "path-resolver.ts"
+                  },
+                  {
+                    "name": "types.ts"
+                  },
+                  {
+                    "name": "walker.ts"
+                  }
+                ]
+              },
+              {
+                "name": "tests",
+                "path": "adapters/archidoc-ts/tests",
+                "dirs": [
+                  {
+                    "name": "fixtures",
+                    "path": "adapters/archidoc-ts/tests/fixtures",
+                    "dirs": [
+                      {
+                        "name": "dashboard",
+                        "path": "adapters/archidoc-ts/tests/fixtures/dashboard",
+                        "dirs": [
+                          {
+                            "name": "charts",
+                            "path": "adapters/archidoc-ts/tests/fixtures/dashboard/charts",
+                            "files": [
+                              {
+                                "name": "index.ts"
+                              }
+                            ]
+                          }
+                        ],
+                        "files": [
+                          {
+                            "name": "index.ts"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ],
+                "files": [
+                  {
+                    "name": "import-extraction.test.ts"
+                  },
+                  {
+                    "name": "integration.test.ts"
+                  },
+                  {
+                    "name": "parser.test.ts"
+                  },
+                  {
+                    "name": "walker.test.ts"
+                  }
+                ]
+              }
+            ],
+            "files": [
+              {
+                "name": "README.md"
+              },
+              {
+                "name": "package.json"
+              },
+              {
+                "name": "tsconfig.json"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "core",
+        "path": "core",
+        "dirs": [
+          {
+            "name": "archidoc-cli",
+            "path": "core/archidoc-cli",
+            "dirs": [
+              {
+                "name": "src",
+                "path": "core/archidoc-cli/src",
+                "files": [
+                  {
+                    "name": "main.rs"
+                  }
+                ]
+              },
+              {
+                "name": "tests",
+                "path": "core/archidoc-cli/tests",
+                "files": [
+                  {
+                    "name": "cli_integration_test.rs"
+                  },
+                  {
+                    "name": "polyglot_detection_test.rs"
+                  }
+                ]
+              }
+            ],
+            "files": [
+              {
+                "name": "Cargo.toml"
+              }
+            ]
+          },
+          {
+            "name": "archidoc-engine",
+            "path": "core/archidoc-engine",
+            "dirs": [
+              {
+                "name": "src",
+                "path": "core/archidoc-engine/src",
+                "dirs": [
+                  {
+                    "name": "scaffold_ir",
+                    "path": "core/archidoc-engine/src/scaffold_ir",
+                    "c4_level": "unknown",
+                    "description": "ScaffoldIR — JSON-based scaffold template system.",
+                    "pattern_status": "planned",
+                    "content": "ScaffoldIR — JSON-based scaffold template system.\n\nA ScaffoldIR template is a single `.json` file that describes a directory\nstructure to instantiate. Templates compose via `$ref` node references.\n\n| File | Purpose |\n|------|---------|\n| `resolver.rs` | `$ref` resolution pre-pass |\n| `executor.rs` | Variable substitution + directory instantiation |\n| `builtins.rs` | Embedded built-in templates |\n| `discover.rs` | Walk-up `.archidoc/scaffolds/<name>.json` finder |\n| `variables.rs` | Variable collection and validation |\n| `compile.rs` | Compile a folder template directory into a ScaffoldIR JSON |",
+                    "source_file": "core/archidoc-engine/src/scaffold_ir/mod.rs",
+                    "files": [
+                      {
+                        "name": "builtins.rs",
+                        "pattern_status": "planned",
+                        "purpose": "Embedded built-in templates",
+                        "health": "planned"
+                      },
+                      {
+                        "name": "compile.rs",
+                        "pattern_status": "planned",
+                        "purpose": "Compile a folder template directory into a ScaffoldIR JSON",
+                        "health": "planned"
+                      },
+                      {
+                        "name": "discover.rs",
+                        "pattern_status": "planned",
+                        "purpose": "Walk-up `.archidoc/scaffolds/<name>.json` finder",
+                        "health": "planned"
+                      },
+                      {
+                        "name": "executor.rs",
+                        "pattern_status": "planned",
+                        "purpose": "Variable substitution + directory instantiation",
+                        "health": "planned"
+                      },
+                      {
+                        "name": "mod.rs"
+                      },
+                      {
+                        "name": "resolver.rs",
+                        "pattern_status": "planned",
+                        "purpose": "`$ref` resolution pre-pass",
+                        "health": "planned"
+                      },
+                      {
+                        "name": "variables.rs",
+                        "pattern_status": "planned",
+                        "purpose": "Variable collection and validation",
+                        "health": "planned"
+                      }
+                    ]
+                  }
+                ],
+                "files": [
+                  {
+                    "name": "ai_context.rs"
+                  },
+                  {
+                    "name": "annotate.rs"
+                  },
+                  {
+                    "name": "architecture.rs"
+                  },
+                  {
+                    "name": "check.rs"
+                  },
+                  {
+                    "name": "context.rs"
+                  },
+                  {
+                    "name": "coverage.rs"
+                  },
+                  {
+                    "name": "custom.rs"
+                  },
+                  {
+                    "name": "design_validate.rs"
+                  },
+                  {
+                    "name": "diagnostics.rs"
+                  },
+                  {
+                    "name": "drawio.rs"
+                  },
+                  {
+                    "name": "health.rs"
+                  },
+                  {
+                    "name": "ir.rs"
+                  },
+                  {
+                    "name": "ir_builder.rs"
+                  },
+                  {
+                    "name": "lib.rs"
+                  },
+                  {
+                    "name": "merge.rs"
+                  },
+                  {
+                    "name": "mermaid.rs"
+                  },
+                  {
+                    "name": "plantuml.rs"
+                  },
+                  {
+                    "name": "tree.rs"
+                  },
+                  {
+                    "name": "validate.rs"
+                  }
+                ]
+              }
+            ],
+            "files": [
+              {
+                "name": "Cargo.toml"
+              }
+            ]
+          },
+          {
+            "name": "archidoc-types",
+            "path": "core/archidoc-types",
+            "dirs": [
+              {
+                "name": "src",
+                "path": "core/archidoc-types/src",
+                "files": [
+                  {
+                    "name": "annotation.rs"
+                  },
+                  {
+                    "name": "ir.rs"
+                  },
+                  {
+                    "name": "lib.rs"
+                  },
+                  {
+                    "name": "module_doc.rs"
+                  },
+                  {
+                    "name": "report.rs"
+                  },
+                  {
+                    "name": "scaffold_ir.rs"
+                  }
+                ]
+              }
+            ],
+            "files": [
+              {
+                "name": "Cargo.toml"
+              }
+            ]
+          },
+          {
+            "name": "spec",
+            "path": "core/spec",
+            "files": [
+              {
+                "name": "archidoc-ir-schema.json"
+              }
+            ]
+          },
+          {
+            "name": "tests",
+            "path": "core/tests",
+            "dirs": [
+              {
+                "name": "src",
+                "path": "core/tests/src",
+                "dirs": [
+                  {
+                    "name": "drivers",
+                    "path": "core/tests/src/drivers",
+                    "dirs": [
+                      {
+                        "name": "in_memory",
+                        "path": "core/tests/src/drivers/in_memory",
+                        "files": [
+                          {
+                            "name": "architecture.rs"
+                          },
+                          {
+                            "name": "mod.rs"
+                          }
+                        ]
+                      },
+                      {
+                        "name": "protocol_driver",
+                        "path": "core/tests/src/drivers/protocol_driver",
+                        "files": [
+                          {
+                            "name": "architecture.rs"
+                          },
+                          {
+                            "name": "mod.rs"
+                          }
+                        ]
+                      }
+                    ],
+                    "files": [
+                      {
+                        "name": "mod.rs"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "dsl",
+                    "path": "core/tests/src/dsl",
+                    "files": [
+                      {
+                        "name": "architecture.rs"
+                      },
+                      {
+                        "name": "mod.rs"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "fakes",
+                    "path": "core/tests/src/fakes",
+                    "files": [
+                      {
+                        "name": "fake_source_tree.rs"
+                      },
+                      {
+                        "name": "mod.rs"
+                      }
+                    ]
+                  }
+                ],
+                "files": [
+                  {
+                    "name": "lib.rs"
+                  },
+                  {
+                    "name": "params.rs"
+                  }
+                ]
+              },
+              {
+                "name": "tests",
+                "path": "core/tests/tests",
+                "files": [
+                  {
+                    "name": "architecture_compilation_test.rs"
+                  },
+                  {
+                    "name": "component_relationships_test.rs"
+                  },
+                  {
+                    "name": "documentation_drift_test.rs"
+                  },
+                  {
+                    "name": "expanded_pattern_validation_test.rs"
+                  },
+                  {
+                    "name": "health_reporting_test.rs"
+                  },
+                  {
+                    "name": "ir_file_consumption_test.rs"
+                  },
+                  {
+                    "name": "ir_merge_test.rs"
+                  },
+                  {
+                    "name": "ir_negative_validation_test.rs"
+                  },
+                  {
+                    "name": "ir_roundtrip_stability_test.rs"
+                  },
+                  {
+                    "name": "pattern_validation_test.rs"
+                  },
+                  {
+                    "name": "portable_ir_test.rs"
+                  },
+                  {
+                    "name": "project_health_test.rs"
+                  },
+                  {
+                    "name": "validation_test.rs"
+                  }
+                ]
+              }
+            ],
+            "files": [
+              {
+                "name": "Cargo.toml"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "docs",
+        "path": "docs",
+        "files": [
+          {
+            "name": "annotating-your-project.md"
+          },
+          {
+            "name": "annotation-spec.md"
+          },
+          {
+            "name": "annotation-syntax-rfc.md"
+          },
+          {
+            "name": "archidoc-for-llms.md"
+          },
+          {
+            "name": "how-to-write-a-language-adapter.md"
+          }
+        ]
+      },
+      {
+        "name": "examples",
+        "path": "examples",
+        "dirs": [
+          {
+            "name": "rust-example",
+            "path": "examples/rust-example",
+            "dirs": [
+              {
+                "name": "src",
+                "path": "examples/rust-example/src",
+                "dirs": [
+                  {
+                    "name": "api",
+                    "path": "examples/rust-example/src/api",
+                    "c4_level": "container",
+                    "description": "REST API gateway — handles authentication and request routing.",
+                    "pattern_status": "planned",
+                    "content": "@c4 container\n# Api\n\nREST API gateway — handles authentication and request routing.\n\n@c4 uses database \"Persists user data\" \"sqlx\"\n@c4 uses events \"Publishes domain events\" \"channel\"\n\n| File | Pattern | Purpose | Health |\n|------|---------|---------|--------|\n| `routes.rs` | -- | HTTP route handlers | active |\n| `middleware.rs` | Strategy | Auth and rate limiting | stable |\n| `errors.rs` | -- | Error types and conversions | stable |",
+                    "source_file": "examples/rust-example/src/api/mod.rs",
+                    "relationships": [
+                      {
+                        "target": "database",
+                        "label": "Persists user data",
+                        "protocol": "sqlx"
+                      },
+                      {
+                        "target": "events",
+                        "label": "Publishes domain events",
+                        "protocol": "channel"
+                      }
+                    ],
+                    "files": [
+                      {
+                        "name": "errors.rs",
+                        "pattern_status": "planned",
+                        "purpose": "Error types and conversions",
+                        "health": "stable"
+                      },
+                      {
+                        "name": "middleware.rs",
+                        "pattern": "Strategy",
+                        "pattern_status": "planned",
+                        "purpose": "Auth and rate limiting",
+                        "health": "stable"
+                      },
+                      {
+                        "name": "mod.rs"
+                      },
+                      {
+                        "name": "routes.rs",
+                        "pattern_status": "planned",
+                        "purpose": "HTTP route handlers",
+                        "health": "active"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "database",
+                    "path": "examples/rust-example/src/database",
+                    "c4_level": "container",
+                    "description": "Persistence layer — manages database connections and queries.",
+                    "pattern_status": "planned",
+                    "content": "@c4 container\n# Database\n\nPersistence layer — manages database connections and queries.\n\n| File | Pattern | Purpose | Health |\n|------|---------|---------|--------|\n| `pool.rs` | Singleton | Connection pool management | stable |\n| `queries.rs` | Repository | SQL query implementations | active |",
+                    "source_file": "examples/rust-example/src/database/mod.rs",
+                    "files": [
+                      {
+                        "name": "mod.rs"
+                      },
+                      {
+                        "name": "pool.rs",
+                        "pattern": "Singleton",
+                        "pattern_status": "planned",
+                        "purpose": "Connection pool management",
+                        "health": "stable"
+                      },
+                      {
+                        "name": "queries.rs",
+                        "pattern": "Repository",
+                        "pattern_status": "planned",
+                        "purpose": "SQL query implementations",
+                        "health": "active"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "events",
+                    "path": "examples/rust-example/src/events",
+                    "c4_level": "container",
+                    "description": "Domain event bus — decouples producers from consumers.",
+                    "pattern_status": "planned",
+                    "content": "@c4 container\n# Events\n\nDomain event bus — decouples producers from consumers.\n\n| File | Pattern | Purpose | Health |\n|------|---------|---------|--------|\n| `bus.rs` | Observer | Event dispatch and subscription | active |\n| `types.rs` | -- | Event type definitions | stable |",
+                    "source_file": "examples/rust-example/src/events/mod.rs",
+                    "files": [
+                      {
+                        "name": "bus.rs",
+                        "pattern": "Observer",
+                        "pattern_status": "planned",
+                        "purpose": "Event dispatch and subscription",
+                        "health": "active"
+                      },
+                      {
+                        "name": "mod.rs"
+                      },
+                      {
+                        "name": "types.rs",
+                        "pattern_status": "planned",
+                        "purpose": "Event type definitions",
+                        "health": "stable"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "files": [
+              {
+                "name": "README.md"
+              }
+            ]
+          },
+          {
+            "name": "ts-example",
+            "path": "examples/ts-example",
+            "dirs": [
+              {
+                "name": "src",
+                "path": "examples/ts-example/src",
+                "dirs": [
+                  {
+                    "name": "dashboard",
+                    "path": "examples/ts-example/src/dashboard",
+                    "files": [
+                      {
+                        "name": "charts.ts"
+                      },
+                      {
+                        "name": "index.ts"
+                      },
+                      {
+                        "name": "state.ts"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "websocket",
+                    "path": "examples/ts-example/src/websocket",
+                    "files": [
+                      {
+                        "name": "connection.ts"
+                      },
+                      {
+                        "name": "index.ts"
+                      },
+                      {
+                        "name": "protocol.ts"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "files": [
+              {
+                "name": "README.md"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "hooks",
+        "path": "hooks",
+        "files": [
+          {
+            "name": "README.md"
+          }
+        ]
+      }
+    ],
+    "files": [
+      {
+        "name": "ARCHITECTURE.md"
+      },
+      {
+        "name": "CHANGELOG.md"
+      },
+      {
+        "name": "CLAUDE.md"
+      },
+      {
+        "name": "CONTRIBUTING.md"
+      },
+      {
+        "name": "Cargo.toml"
+      },
+      {
+        "name": "README.md"
+      }
+    ]
+  }
+}

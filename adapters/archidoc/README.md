@@ -17,12 +17,12 @@ npm install -D archidoc
 npx archidoc compile ir .
 
 # Render documentation (from IR or directory)
-npx archidoc render md _context/current.json
+npx archidoc render md _context/archidoc/current.json
 npx archidoc render context ./src/
-npx archidoc render ai _context/current.json
+npx archidoc render ai _context/archidoc/current.json
 
 # Validate architecture conformance
-npx archidoc validate _context/architecture.json _context/current.json
+npx archidoc validate _context/archidoc/architecture.json _context/archidoc/current.json
 
 # Scaffold a project template
 npx archidoc scaffold --list

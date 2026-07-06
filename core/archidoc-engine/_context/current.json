@@ -1,0 +1,119 @@
+{
+  "version": "2.0",
+  "scan_root": "C:\\Code-Projects\\Tool-Projects\\Archidoc\\core\\archidoc-engine\\./src",
+  "root": {
+    "name": ".",
+    "path": ".",
+    "dirs": [
+      {
+        "name": "scaffold_ir",
+        "path": "scaffold_ir",
+        "c4_level": "unknown",
+        "description": "ScaffoldIR — JSON-based scaffold template system.",
+        "pattern_status": "planned",
+        "content": "ScaffoldIR — JSON-based scaffold template system.\n\nA ScaffoldIR template is a single `.json` file that describes a directory\nstructure to instantiate. Templates compose via `$ref` node references.\n\n| File | Purpose |\n|------|---------|\n| `resolver.rs` | `$ref` resolution pre-pass |\n| `executor.rs` | Variable substitution + directory instantiation |\n| `builtins.rs` | Embedded built-in templates |\n| `discover.rs` | Walk-up `.archidoc/scaffolds/<name>.json` finder |\n| `variables.rs` | Variable collection and validation |\n| `compile.rs` | Compile a folder template directory into a ScaffoldIR JSON |",
+        "source_file": "scaffold_ir/mod.rs",
+        "files": [
+          {
+            "name": "builtins.rs",
+            "pattern_status": "planned",
+            "purpose": "Embedded built-in templates",
+            "health": "planned"
+          },
+          {
+            "name": "compile.rs",
+            "pattern_status": "planned",
+            "purpose": "Compile a folder template directory into a ScaffoldIR JSON",
+            "health": "planned"
+          },
+          {
+            "name": "discover.rs",
+            "pattern_status": "planned",
+            "purpose": "Walk-up `.archidoc/scaffolds/<name>.json` finder",
+            "health": "planned"
+          },
+          {
+            "name": "executor.rs",
+            "pattern_status": "planned",
+            "purpose": "Variable substitution + directory instantiation",
+            "health": "planned"
+          },
+          {
+            "name": "mod.rs"
+          },
+          {
+            "name": "resolver.rs",
+            "pattern_status": "planned",
+            "purpose": "`$ref` resolution pre-pass",
+            "health": "planned"
+          },
+          {
+            "name": "variables.rs",
+            "pattern_status": "planned",
+            "purpose": "Variable collection and validation",
+            "health": "planned"
+          }
+        ]
+      }
+    ],
+    "files": [
+      {
+        "name": "ai_context.rs"
+      },
+      {
+        "name": "annotate.rs"
+      },
+      {
+        "name": "architecture.rs"
+      },
+      {
+        "name": "check.rs"
+      },
+      {
+        "name": "context.rs"
+      },
+      {
+        "name": "coverage.rs"
+      },
+      {
+        "name": "custom.rs"
+      },
+      {
+        "name": "design_validate.rs"
+      },
+      {
+        "name": "diagnostics.rs"
+      },
+      {
+        "name": "drawio.rs"
+      },
+      {
+        "name": "health.rs"
+      },
+      {
+        "name": "ir.rs"
+      },
+      {
+        "name": "ir_builder.rs"
+      },
+      {
+        "name": "lib.rs"
+      },
+      {
+        "name": "merge.rs"
+      },
+      {
+        "name": "mermaid.rs"
+      },
+      {
+        "name": "plantuml.rs"
+      },
+      {
+        "name": "tree.rs"
+      },
+      {
+        "name": "validate.rs"
+      }
+    ]
+  }
+}

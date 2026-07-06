@@ -529,7 +529,7 @@ mod tests {
             severity: Severity::Error,
             code: "E001",
             title: "documentation drift",
-            location: "_context/ARCHITECTURE.md".to_string(),
+            location: "_context/archidoc/ARCHITECTURE.md".to_string(),
             detail: Some("committed file does not match source".to_string()),
             fix: Some("archidoc compile architecture.md .".to_string()),
         });

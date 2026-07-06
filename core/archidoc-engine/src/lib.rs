@@ -23,6 +23,7 @@
 //! | `custom.rs` | -- | Template loading and token substitution | stable |
 //! | `annotate.rs` | -- | Directory annotation generation for rs/ts/js/md | stable |
 //! | `diagnostics.rs` | -- | Unified diagnostic engine — errors and warnings for --validate | stable |
+//! | `narrative_context.rs` | -- | Discovery and parsing of `.archidoc/narrative-context.md` source file | active |
 //! | `scaffold_ir/` | -- | JSON scaffold template engine — `archidoc scaffold <name>` | active |
 
 pub mod ai_context;
@@ -42,6 +43,7 @@ pub mod ir_builder;
 pub mod ir_query;
 pub mod merge;
 pub mod mermaid;
+pub mod narrative_context;
 pub mod plantuml;
 pub mod scaffold_ir;
 pub mod tree;
