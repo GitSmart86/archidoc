@@ -62,11 +62,20 @@ fn module_path_to_dir_path(module: &ModuleDoc, scan_root: &Path) -> String {
     }
 
     let source = Path::new(&module.source_file);
+    let filename = source.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
     // Try to strip scan_root prefix
     if !scan_root.as_os_str().is_empty() {
         if let Ok(relative) = source.strip_prefix(scan_root) {
-            let dir = relative.parent().unwrap_or(Path::new("."));
+            let mut dir = relative.parent().unwrap_or(Path::new("."));
+            // A crate-root `lib.rs` represents its crate, not the `src/` directory
+            // it physically lives in. Collapse `<crate>/src/lib.rs` to `<crate>` so
+            // the annotation lands on the crate node.
+            if filename == "lib.rs"
+                && dir.file_name().and_then(|n| n.to_str()) == Some("src")
+            {
+                dir = dir.parent().unwrap_or(Path::new("."));
+            }
             let dir_str = dir.to_string_lossy().replace('\\', "/");
             if !dir_str.is_empty() {
                 return dir_str;
@@ -75,7 +84,7 @@ fn module_path_to_dir_path(module: &ModuleDoc, scan_root: &Path) -> String {
         }
     }
 
-    // Fallback: derive from module_path (dot → slash)
+    // Otherwise derive from module_path (dot → slash)
     let path = module.module_path.replace('.', "/");
     if path.is_empty() { ".".to_string() } else { path }
 }
