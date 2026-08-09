@@ -331,6 +331,7 @@ digraph {
                 protocol: "Rust".to_string(),
             }],
             files: vec![],
+            layer: None,
         }];
 
         let graph = ImportGraph::default(); // Empty graph
@@ -357,6 +358,7 @@ digraph {
             parent_container: None,
             relationships: vec![],
             files: vec![],
+            layer: None,
         }];
 
         let mut graph = ImportGraph::default();
