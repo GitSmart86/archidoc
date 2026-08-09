@@ -82,11 +82,40 @@ pub struct DirNode {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relationships: Vec<Relationship>,
 
+    // -- Code-level elements (@c4 code) --
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub code_elements: Vec<CodeElement>,
+
+    // -- Trait realizations (`impl Trait for Type`) of @c4 code types --
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trait_impls: Vec<TraitImpl>,
+
     // -- Children --
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dirs: Vec<DirNode>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<FileNode>,
+}
+
+/// A code-level element (`@c4 code`) attached to its component.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeElement {
+    pub name: String,
+    /// `struct` | `enum` | `trait` | `fn`
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relationships: Vec<Relationship>,
+}
+
+/// A trait realization (`impl Trait for Type`) whose implementing type is a
+/// `@c4 code` element. Rendered as an "implements" arrow in the code diagram
+/// when the trait is also a `@c4 code` element.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TraitImpl {
+    pub type_name: String,
+    pub trait_name: String,
 }
 
 /// A file node in the architecture tree.
@@ -210,6 +239,8 @@ impl DirNode {
             source_file: None,
             parent: None,
             relationships: Vec::new(),
+            code_elements: Vec::new(),
+            trait_impls: Vec::new(),
             dirs: Vec::new(),
             files: Vec::new(),
         }

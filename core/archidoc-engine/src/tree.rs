@@ -276,6 +276,8 @@ pub fn build_dir_tree(
             source_file: None,
             parent: None,
             relationships: Vec::new(),
+            code_elements: Vec::new(),
+            trait_impls: Vec::new(),
             dirs,
             files,
         }

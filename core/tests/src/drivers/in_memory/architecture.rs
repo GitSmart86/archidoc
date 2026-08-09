@@ -144,6 +144,8 @@ fn ir_to_module_docs(ir: &ArchitectureIR) -> Vec<ModuleDoc> {
                 parent_container,
                 relationships,
                 files,
+                code_elements: Vec::new(),
+                trait_impls: Vec::new(),
             });
         }
 
